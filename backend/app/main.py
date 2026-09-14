@@ -14,6 +14,7 @@ from app.schemas import (
     ProductResponse,
     ProductVariantCreate,
     ProductVariantResponse,
+    ProductVariantUpdate,
     ProductUpdate,
 )
 
@@ -320,3 +321,35 @@ def get_product_variant(variant_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Product variant not found")
 
     return variant
+
+
+@app.put(
+    "/product-variants/{variant_id}",
+    response_model=ProductVariantResponse
+)
+def update_product_variant(
+    variant_id: int,
+    variant_data: ProductVariantUpdate,
+    db: Session = Depends(get_db)
+):
+    variant = db.query(ProductVariant).filter(
+        ProductVariant.id == variant_id
+    ).first()
+
+    if not variant:
+        raise HTTPException(status_code=404, detail="Product variant not found")
+
+    if variant_data.size is not None:
+        variant.size = variant_data.size
+
+    if variant_data.price is not None:
+        variant.price = variant_data.price
+
+    if variant_data.is_available is not None:
+        variant.is_available = variant_data.is_available
+
+    db.commit()
+    db.refresh(variant)
+
+    return variant
+
