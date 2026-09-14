@@ -32,16 +32,12 @@ def get_db():
 
 @app.get("/")
 def home():
-    return {
-        "message": "Welcome to Domino's Food Ordering API"
-    }
+    return {"message": "Welcome to Domino's Food Ordering API"}
 
 
 @app.post("/users")
-def create_user(
-    user: UserCreate,
-    db: Session = Depends(get_db)
-):
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    
     db_user = User(
         username=user.username,
         email=user.email,
@@ -62,47 +58,30 @@ def create_user(
 
 
 @app.get("/users", response_model=list[UserResponse])
-def get_users(
-    db: Session = Depends(get_db)
-):
+def get_users(db: Session = Depends(get_db)):
+    
     users = db.query(User).all()
 
     return users
 
 
 @app.get("/users/{user_id}", response_model=UserResponse)
-def get_user(
-    user_id: int,
-    db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(
-        User.id == user_id
-    ).first()
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    
+    user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
     return user
 
 
 @app.put("/users/{user_id}", response_model=UserResponse)
-def update_user(
-    user_id: int,
-    user_data: UserUpdate,
-    db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(
-        User.id == user_id
-    ).first()
+def update_user(user_id: int, user_data: UserUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
     if user_data.username is not None:
         user.username = user_data.username
@@ -120,36 +99,23 @@ def update_user(
 
 
 @app.delete("/users/{user_id}")
-def delete_user(
-    user_id: int,
-    db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(
-        User.id == user_id
-    ).first()
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    
+    user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
     db.delete(user)
     db.commit()
 
-    return {
-        "message": "User deleted successfully"
-    }
+    return {"message": "User deleted successfully"}
 
 
 @app.post("/categories", response_model=CategoryResponse)
-def create_category(
-    category: CategoryCreate,
-    db: Session = Depends(get_db)
-):
-    db_category = Category(
-        name=category.name
-    )
+def create_category(category: CategoryCreate, db: Session = Depends(get_db)):
+    
+    db_category = Category(name=category.name)
 
     db.add(db_category)
     db.commit()
@@ -159,53 +125,31 @@ def create_category(
 
 
 @app.get("/categories", response_model=list[CategoryResponse])
-def get_categories(
-    db: Session = Depends(get_db)
-):
+def get_categories(db: Session = Depends(get_db)):
+    
     categories = db.query(Category).all()
 
     return categories
 
 
-@app.get(
-    "/categories/{category_id}",
-    response_model=CategoryResponse
-)
-def get_category(
-    category_id: int,
-    db: Session = Depends(get_db)
-):
-    category = db.query(Category).filter(
-        Category.id == category_id
-    ).first()
+@app.get("/categories/{category_id}", response_model=CategoryResponse)
+def get_category(category_id: int, db: Session = Depends(get_db)):
+    
+    category = db.query(Category).filter(Category.id == category_id).first()
 
     if not category:
-        raise HTTPException(
-            status_code=404,
-            detail="Category not found"
-        )
+        raise HTTPException(status_code=404, detail="Category not found")
 
     return category
 
 
-@app.put(
-    "/categories/{category_id}",
-    response_model=CategoryResponse
-)
-def update_category(
-    category_id: int,
-    category_data: CategoryUpdate,
-    db: Session = Depends(get_db)
-):
-    category = db.query(Category).filter(
-        Category.id == category_id
-    ).first()
+@app.put("/categories/{category_id}", response_model=CategoryResponse)
+def update_category(category_id: int, category_data: CategoryUpdate, db: Session = Depends(get_db)):
+    
+    category = db.query(Category).filter(Category.id == category_id).first()
 
     if not category:
-        raise HTTPException(
-            status_code=404,
-            detail="Category not found"
-        )
+        raise HTTPException(status_code=404, detail="Category not found")
 
     if category_data.name is not None:
         category.name = category_data.name
@@ -220,47 +164,28 @@ def update_category(
 
 
 @app.delete("/categories/{category_id}")
-def delete_category(
-    category_id: int,
-    db: Session = Depends(get_db)
-):
-    category = db.query(Category).filter(
-        Category.id == category_id
-    ).first()
+def delete_category(category_id: int, db: Session = Depends(get_db)):
+    
+    category = db.query(Category).filter(Category.id == category_id).first()
 
     if not category:
-        raise HTTPException(
-            status_code=404,
-            detail="Category not found"
-        )
+        raise HTTPException(status_code=404, detail="Category not found")
 
     db.delete(category)
     db.commit()
 
-    return {
-        "message": "Category deleted successfully"
-    }
+    return {"message": "Category deleted successfully"}
 
 
-# --------------------------------------------------
 # Products
-# --------------------------------------------------
 
 @app.post("/products", response_model=ProductResponse)
-def create_product(
-    product: ProductCreate,
-    db: Session = Depends(get_db)
-):
+def create_product(product: ProductCreate, db: Session = Depends(get_db)):
     # Check category exists
-    category = db.query(Category).filter(
-        Category.id == product.category_id
-    ).first()
+    category = db.query(Category).filter(Category.id == product.category_id).first()
 
     if not category:
-        raise HTTPException(
-            status_code=404,
-            detail="Category not found"
-        )
+        raise HTTPException(status_code=404, detail="Category not found")
 
     db_product = Product(
         name=product.name,
@@ -276,46 +201,32 @@ def create_product(
 
     return db_product
 
+@app.get("/products", response_model=list[ProductResponse])
+def get_products(db: Session = Depends(get_db)):
+    
+    products = db.query(Product).all()
 
-@app.get(
-    "/products/{product_id}",
-    response_model=ProductResponse
-)
-def get_product(
-    product_id: int,
-    db: Session = Depends(get_db)
-):
-    product = db.query(Product).filter(
-        Product.id == product_id
-    ).first()
+    return products
+
+
+@app.get("/products/{product_id}", response_model=ProductResponse)
+def get_product(product_id: int, db: Session = Depends(get_db)):
+    
+    product = db.query(Product).filter(Product.id == product_id).first()
 
     if not product:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found"
-        )
+        raise HTTPException(status_code=404, detail="Product not found")
 
     return product
 
 
-@app.put(
-    "/products/{product_id}",
-    response_model=ProductResponse
-)
-def update_product(
-    product_id: int,
-    product_data: ProductUpdate,
-    db: Session = Depends(get_db)
-):
-    product = db.query(Product).filter(
-        Product.id == product_id
-    ).first()
+@app.put("/products/{product_id}", response_model=ProductResponse)
+def update_product(product_id: int, product_data: ProductUpdate, db: Session = Depends(get_db)):
+    
+    product = db.query(Product).filter(Product.id == product_id).first()
 
     if not product:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found"
-        )
+        raise HTTPException(status_code=404, detail="Product not found")
 
     if product_data.name is not None:
         product.name = product_data.name
@@ -356,50 +267,28 @@ def update_product(
 
 
 @app.delete("/products/{product_id}")
-def delete_product(
-    product_id: int,
-    db: Session = Depends(get_db)
-):
-    product = db.query(Product).filter(
-        Product.id == product_id
-    ).first()
+def delete_product(product_id: int, db: Session = Depends(get_db)):
+    
+    product = db.query(Product).filter(Product.id == product_id).first()
 
     if not product:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found"
-        )
+        raise HTTPException(status_code=404, detail="Product not found")
 
     db.delete(product)
     db.commit()
 
-    return {
-        "message": "Product deleted successfully"
-    }
+    return {"message": "Product deleted successfully"}
 
 
-# --------------------------------------------------
 # Product Variants
-# --------------------------------------------------
 
-@app.post(
-    "/product-variants",
-    response_model=ProductVariantResponse
-)
-def create_product_variant(
-    variant: ProductVariantCreate,
-    db: Session = Depends(get_db)
-):
+@app.post("/product-variants", response_model=ProductVariantResponse)
+def create_product_variant(variant: ProductVariantCreate, db: Session = Depends(get_db)):
     # Check product exists
-    product = db.query(Product).filter(
-        Product.id == variant.product_id
-    ).first()
+    product = db.query(Product).filter(Product.id == variant.product_id).first()
 
     if not product:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found"
-        )
+        raise HTTPException(status_code=404, detail="Product not found")
 
     db_variant = ProductVariant(
         product_id=variant.product_id,
@@ -412,3 +301,22 @@ def create_product_variant(
     db.refresh(db_variant)
 
     return db_variant
+
+
+@app.get("/product-variants", response_model=list[ProductVariantResponse])
+
+def get_product_variants(db: Session = Depends(get_db)):
+    variants = db.query(ProductVariant).all()
+
+    return variants
+
+
+@app.get("/product-variants/{variant_id}", response_model=ProductVariantResponse)
+def get_product_variant(variant_id: int, db: Session = Depends(get_db)):
+    
+    variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
+
+    if not variant:
+        raise HTTPException(status_code=404, detail="Product variant not found")
+
+    return variant
