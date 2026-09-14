@@ -60,6 +60,12 @@ class ProductVariantCreate(BaseModel):
     product_id: int
     size: Literal["Small", "Medium", "Large"]
     price: int = Field(gt=0)
+    
+
+class ProductVariantUpdate(BaseModel):
+    size: Literal["Small", "Medium", "Large"] | None = None
+    price: int | None = Field(default=None, gt=0)
+    is_available: bool | None = None
 
 
 class ProductVariantResponse(BaseModel):
