@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from app.database import Base
+from sqlalchemy.orm import relationship
 
 
 class User(Base):
@@ -13,6 +14,16 @@ class User(Base):
     role = Column(String, default="customer")
     is_active = Column(Boolean, default=True)
     
+
+class Size(Base):
+    __tablename__ = "sizes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    is_active = Column(Boolean, default=True)
+    variants = relationship("ProductVariant", back_populates="size")
+    
+    
     
 class Category(Base):
     __tablename__ = "categories"
@@ -20,6 +31,7 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     is_active = Column(Boolean, default=True)
+    products = relationship("Product", back_populates = "category")
     
     
 class Product(Base):
@@ -33,6 +45,8 @@ class Product(Base):
     is_veg = Column(Boolean, default=True)
     is_available = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
+    category = relationship("Category", back_populates="products")
+    variants = relationship("ProductVariant", back_populates="product")
     
 
 class ProductVariant(Base):
@@ -40,6 +54,10 @@ class ProductVariant(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    size = Column(String, nullable=False)
+    size_id = Column(Integer, ForeignKey(Size.id))
     price = Column(Integer, nullable=False)
     is_available = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
+    product = relationship("Product", back_populates="variants")
+    size = relationship("Size", back_populates="variants")
+   
