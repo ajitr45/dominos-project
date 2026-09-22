@@ -9,14 +9,14 @@ class UserCreate(BaseModel):
     username: str
     email: str
     password: str = Field(min_length=6)
-    phone: str | None = None
+    phone: str 
 
 
 class UserResponse(BaseModel):
     id: int
     username: str
     email: str
-    phone: str | None = None
+    phone: str 
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -151,3 +151,10 @@ class ProductResponse(BaseModel):
     variants: list[ProductVariantResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+    
+    
+## Login ##
+
+class LoginRequest(BaseModel):
+    identifier: str
+    password: str = Field(min_length=6)    
