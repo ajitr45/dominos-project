@@ -1,38 +1,17 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
-
-from app.database import SessionLocal
+from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
+from app.database import SessionLocal, get_db
 from app.models import User, Category, Product, ProductVariant, Size
-from app.schemas import (
-    UserCreate,
-    UserResponse,
-    UserUpdate,
-    SizeCreate,
-    SizeResponse,
-    SizeUpdate,
-    CategoryCreate,
-    CategoryResponse,
-    CategoryUpdate,
-    ProductCreate,
-    ProductResponse,
-    ProductVariantCreate,
-    ProductVariantResponse,
-    ProductVariantUpdate,
-    ProductUpdate,
-)
+from app.schemas import (UserCreate, UserResponse, UserUpdate, SizeCreate, SizeResponse, SizeUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, ProductCreate, ProductResponse, ProductVariantCreate, ProductVariantResponse, ProductVariantUpdate, ProductUpdate)
 
 
 app = FastAPI()
 
+app.include_router(auth_router)
+app.include_router(users_router)
 
-# Database Session
-def get_db():
-    db = SessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
 
 @app.get("/")
 def home():
@@ -152,7 +131,7 @@ def get_size(size_id: int, db: Session = Depends(get_db)):
 
 
 @app.patch("/sizes/{size_id}", response_model=SizeResponse)
-def update_size(size_id: int, size_data: SizeUpdate,db: Session = Depends(get_db)):
+def update_size(size_id: int, size_data: SizeUpdate, db: Session = Depends(get_db)):
     
     size = db.query(Size).filter(Size.id == size_id).first()
 
@@ -329,60 +308,59 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     return product
 
 
-@app.patch("/product-variants/{variant_id}", response_model=ProductVariantResponse)
-def update_product_variant(variant_id: int, variant_data: ProductVariantUpdate, db: Session = Depends(get_db)):
-    
-    variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
-
-    if not variant:
-        raise HTTPException(status_code=404, detail="Product variant not found")
-
-    if variant_data.size_id is not None:
-
-        size = db.query(Size).filter(Size.id == variant_data.size_id, Size.is_active == True).first()
-
-        if not size:
-            raise HTTPException(status_code=404, detail="Size not found")
-
-        existing_variant = db.query(ProductVariant).filter(
-            ProductVariant.product_id == variant.product_id,
-            ProductVariant.size_id == variant_data.size_id,
-            ProductVariant.id != variant.id
-        ).first()
-
-        if existing_variant:
-            raise HTTPException(status_code=409, detail="This size already exists for this product")
-
-        variant.size_id = variant_data.size_id
-
-    if variant_data.price is not None:
-        variant.price = variant_data.price
-
-    if variant_data.is_available is not None:
-        variant.is_available = variant_data.is_available
-
-    if variant_data.is_active is not None:
-        variant.is_active = variant_data.is_active
-
-    db.commit()
-    db.refresh(variant)
-
-    return variant
-
-
-@app.delete("/products/{product_id}")
-def delete_product(product_id: int, db: Session = Depends(get_db)):
-    
+@app.patch("/products/{product_id}", response_model=ProductResponse)
+def update_product(
+    product_id: int,
+    product_data: ProductUpdate,
+    db: Session = Depends(get_db)
+):
     product = db.query(Product).filter(Product.id == product_id).first()
 
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    db.delete(product)
+    # Check for duplicate product name
+    if product_data.name is not None:
+        existing_product = db.query(Product).filter(
+            Product.name == product_data.name,
+            Product.id != product_id,
+            Product.is_active == True
+        ).first()
+
+        if existing_product:
+            raise HTTPException(status_code=409, detail="Product with this name already exists")
+
+        product.name = product_data.name
+
+    # Check if the new category exists and is active
+    if product_data.category_id is not None:
+        category = db.query(Category).filter(Category.id == product_data.category_id,
+            Category.is_active == True).first()
+
+        if not category:
+            raise HTTPException(status_code=404, detail="Active category not found")
+
+        product.category_id = product_data.category_id
+
+    if product_data.description is not None:
+        product.description = product_data.description
+
+    if product_data.image is not None:
+        product.image = product_data.image
+
+    if product_data.is_veg is not None:
+        product.is_veg = product_data.is_veg
+
+    if product_data.is_available is not None:
+        product.is_available = product_data.is_available
+
+    if product_data.is_active is not None:
+        product.is_active = product_data.is_active
+
     db.commit()
+    db.refresh(product)
 
-    return {"message": "Product deleted successfully"}
-
+    return product
 
 # Product Variants
 
@@ -396,19 +374,13 @@ def create_product_variant(variant: ProductVariantCreate, db: Session = Depends(
         raise HTTPException(status_code=404, detail="Product not found")
 
     # Check size exists and is active
-    size = db.query(Size).filter(
-        Size.id == variant.size_id,
-        Size.is_active == True
-    ).first()
+    size = db.query(Size).filter(Size.id == variant.size_id, Size.is_active == True).first()
 
     if not size:
         raise HTTPException(status_code=404, detail="Size not found")
 
     # Prevent duplicate product + size
-    existing_variant = db.query(ProductVariant).filter(
-        ProductVariant.product_id == variant.product_id,
-        ProductVariant.size_id == variant.size_id
-    ).first()
+    existing_variant = db.query(ProductVariant).filter(ProductVariant.product_id == variant.product_id, ProductVariant.size_id == variant.size_id).first()
 
     if existing_variant:
         raise HTTPException(status_code=409, detail="This size already exists for this product")
@@ -437,49 +409,57 @@ def get_product_variants(db: Session = Depends(get_db)):
     return variants
 
 
-@app.get("/product-variants/{variant_id}", response_model=ProductVariantResponse)
+@app.get(
+    "/product-variants/{variant_id}",
+    response_model=ProductVariantResponse
+)
 def get_product_variant(variant_id: int, db: Session = Depends(get_db)):
-    
-    variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id, Product.is_active == True,
-        ProductVariant.is_available == True).first()
+    # Only return a variant when both the variant and its product are active and available.
+    variant = (
+        db.query(ProductVariant).join(Product, Product.id == ProductVariant.product_id)
+        .options(selectinload(ProductVariant.size))
+        .filter(    
+            ProductVariant.id == variant_id,
+            ProductVariant.is_active.is_(True),
+            ProductVariant.is_available.is_(True),
+            Product.is_active.is_(True),
+            Product.is_available.is_(True)
+        ).first()
+    )
 
     if not variant:
-        raise HTTPException(status_code=404, detail="Product variant currently unavailable")
+        raise HTTPException(status_code=404, detail="Product variant not found")
 
     return variant
 
 
-@app.patch(
-    "/product-variants/{variant_id}",
-    response_model=ProductVariantResponse
-)
-def update_product_variant(
-    variant_id: int,
-    variant_data: ProductVariantUpdate,
-    db: Session = Depends(get_db)
-):
-    variant = db.query(ProductVariant).filter(
-        ProductVariant.id == variant_id
-    ).first()
+
+@app.patch("/product-variants/{variant_id}", response_model=ProductVariantResponse)
+def update_product_variant(variant_id: int, variant_data: ProductVariantUpdate,
+    db: Session = Depends(get_db)):
+    
+    variant = db.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
 
     if not variant:
-        raise HTTPException(
-            status_code=404,
-            detail="Product variant not found"
-        )
+        raise HTTPException(status_code=404, detail="Product variant not found")
 
     if variant_data.size_id is not None:
 
-        size = db.query(Size).filter(
-            Size.id == variant_data.size_id,
-            Size.is_active == True
-        ).first()
+        # Check whether the selected size exists and is active.
+        size = db.query(Size).filter(Size.id == variant_data.size_id, Size.is_active == True).first()
 
         if not size:
-            raise HTTPException(
-                status_code=404,
-                detail="Size not found"
-            )
+            raise HTTPException(status_code=404, detail="Size not found")
+
+        # Prevent the same size from being added twice to the same product.
+        existing_variant = db.query(ProductVariant).filter(
+            ProductVariant.product_id == variant.product_id,
+            ProductVariant.size_id == variant_data.size_id,
+            ProductVariant.id != variant.id
+        ).first()
+
+        if existing_variant:
+            raise HTTPException(status_code=409, detail="This size already exists for this product")
 
         variant.size_id = variant_data.size_id
 
