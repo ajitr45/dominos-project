@@ -1,7 +1,14 @@
 from datetime import datetime
-from sqlalchemy import Column, DateTime, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, DateTime, Integer, String, Boolean, ForeignKey, Enum as SQLEnum
 from app.database import Base
 from sqlalchemy.orm import relationship
+from enum import Enum
+
+
+class UserRole(str, Enum):
+    CUSTOMER = "customer"
+    ADMIN = "admin"
+    DELIVERY_BOY = "delivery_boy"
 
 
 class User(Base):
@@ -12,7 +19,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     phone = Column(String(20), unique=True, nullable=True)
-    role = Column(String(20), nullable=False, default="customer")
+    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.CUSTOMER)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -63,4 +70,5 @@ class ProductVariant(Base):
     is_active = Column(Boolean, default=True)
     product = relationship("Product", back_populates="variants")
     size = relationship("Size", back_populates="variants")
+   
    
