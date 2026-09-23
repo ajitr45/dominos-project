@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import get_current_user, require_admin, require_delivery_boy
 from app.models import User
 from app.schemas import UserResponse
 
@@ -22,3 +22,8 @@ def admin_area(current_user: User = Depends(require_admin),):
         "message": "Welcome to admin area",
         "admin_id": current_user.id,
     }   
+    
+@router.get("/delivery")
+def delivery_area(current_user: User = Depends(require_delivery_boy)):
+    
+    return {"message": "Welcome to delivery area", "delivery_boy_id": current_user.id}
