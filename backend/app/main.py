@@ -4,13 +4,15 @@ from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
 from app.database import SessionLocal, get_db
 from app.models import User, Category, Product, ProductVariant, Size
-from app.schemas import (UserCreate, UserResponse, UserUpdate, SizeCreate, SizeResponse, SizeUpdate, CategoryCreate, CategoryResponse, CategoryUpdate, ProductCreate, ProductResponse, ProductVariantCreate, ProductVariantResponse, ProductVariantUpdate, ProductUpdate)
+from app.schemas import (UserCreate, UserResponse, UserUpdate, SizeCreate, SizeResponse, SizeUpdate, ProductCreate, ProductResponse, ProductVariantCreate, ProductVariantResponse, ProductVariantUpdate, ProductUpdate)
+from app.routers.categories import router as category_router
 
 
 app = FastAPI()
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(category_router)
 
 
 @app.get("/")
@@ -157,91 +159,6 @@ def update_size(size_id: int, size_data: SizeUpdate, db: Session = Depends(get_d
 
     return size
 
-
-
-@app.post("/categories", response_model=CategoryResponse)
-def create_category(category: CategoryCreate, db: Session = Depends(get_db)):
-    
-    db_category = Category(name=category.name)
-
-    db.add(db_category)
-    db.commit()
-    db.refresh(db_category)
-
-    return db_category
-
-
-@app.get("/categories", response_model=list[CategoryResponse])
-def get_categories(db: Session = Depends(get_db)):
-    
-    categories = (db.query(Category).filter(Category.is_active == True).order_by(Category.id).all())
-
-    return categories
-
-
-@app.get("/categories/{category_id}", response_model=CategoryResponse)
-def get_category(category_id: int, db: Session = Depends(get_db)):
-    
-    category = db.query(Category).filter(Category.id == category_id, Category.is_active == True).first()
-
-    if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
-
-    return category
-
-
-@app.patch("/categories/{category_id}", response_model=CategoryResponse)
-def update_category(category_id: int, category_data: CategoryUpdate, db: Session = Depends(get_db)):
-    
-    category = db.query(Category).filter(Category.id == category_id).first()
-
-    if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
-
-    # Check for duplicate category name
-    if category_data.name is not None:
-        existing_category = db.query(Category).filter(Category.name == category_data.name,
-        Category.id != category_id).first()
-
-        if existing_category:
-            raise HTTPException(status_code=409, detail="Category name already exists")
-
-        category.name = category_data.name
-
-    # Update active status
-    if category_data.is_active is not None:
-        category.is_active = category_data.is_active
-
-    db.commit()
-    db.refresh(category)
-
-    return category
-
-
-@app.delete("/categories/{category_id}")
-def delete_category(category_id: int, db: Session = Depends(get_db)):
-    
-    category = db.query(Category).filter(Category.id == category_id).first()
-
-    if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
-
-    # Deactivate the category
-    category.is_active = False
-
-    # Deactivate all products under this category
-    for product in category.products:
-        product.is_active = False
-        product.is_available = False
-
-        # Deactivate all variants of the product
-        for variant in product.variants:
-            variant.is_active = False
-            variant.is_available = False
-
-    db.commit()
-
-    return {"message": "Category deactivated successfully"}
 
 
 # Products
