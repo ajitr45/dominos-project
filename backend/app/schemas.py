@@ -84,23 +84,33 @@ class CategoryResponse(BaseModel):
 
 class ProductCreate(BaseModel):
     name: str = Field(min_length=2)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=500)
     image: str | None = None
-    category_id: int
+    category_id: int = Field(gt=0)
     is_veg: bool = True
 
 
 class ProductUpdate(BaseModel):
-    name: str | None = Field(
-        default=None,
-        min_length=2
-    )
+    name: str | None = Field(default=None, min_length=2)
     description: str | None = None
     image: str | None = None
-    category_id: int | None = None
+    category_id: int | None = Field(default=None, gt=0)
     is_veg: bool | None = None
     is_available: bool | None = None
-    is_active: bool | None = None
+ 
+ 
+class ProductResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    image: str | None = None
+    category_id: int
+    is_veg: bool
+    is_available: bool
+    is_active: bool
+    variants: list["ProductVariantResponse"] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =========================
@@ -138,18 +148,7 @@ class ProductVariantResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProductResponse(BaseModel):
-    id: int
-    name: str
-    description: str | None = None
-    image: str | None = None
-    category_id: int
-    is_veg: bool
-    is_available: bool
-    is_active: bool
-    variants: list[ProductVariantResponse] = Field(default_factory=list)
 
-    model_config = ConfigDict(from_attributes=True)
     
     
 ## Login ##
