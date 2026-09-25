@@ -81,13 +81,15 @@ def get_product_variant_by_id(db: Session, variant_id: int) -> ProductVariant | 
         )
         .first()
     )
+    
+def get_product_variant_for_admin(db: Session, variant_id: int) -> ProductVariant | None:
+
+    variant = (db.query(ProductVariant).filter(ProductVariant.id == variant_id).first())
+
+    return variant
 
 
-def update_product_variant(
-    db: Session,
-    variant: ProductVariant,
-    variant_data: ProductVariantUpdate,
-) -> ProductVariant:
+def update_product_variant(db: Session, variant: ProductVariant, variant_data: ProductVariantUpdate) -> ProductVariant:
 
     update_data = variant_data.model_dump(exclude_unset=True)
 
@@ -107,9 +109,7 @@ def update_product_variant(
 
     if "size_id" in update_data:
 
-        size = (
-            db.query(Size)
-            .filter(
+        size = (db.query(Size).filter(
                 Size.id == update_data["size_id"],
                 Size.is_active.is_(True),
             )
@@ -158,5 +158,33 @@ def deactivate_product_variant(db: Session, variant: ProductVariant) -> ProductV
 
     db.commit()
     db.refresh(variant)
+
+    return variant
+
+def activate_product_variant(db: Session, variant: ProductVariant) -> ProductVariant:
+
+    existing_variant = (
+        db.query(ProductVariant)
+        .filter(
+            ProductVariant.product_id == variant.product_id,
+            ProductVariant.size_id == variant.size_id,
+            ProductVariant.id != variant.id,
+            ProductVariant.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if existing_variant:
+        raise ValueError("Another active variant already exists for this product and size")
+
+    variant.is_active = True
+
+    try:
+        db.commit()
+        db.refresh(variant)
+
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("Product variant could not be activated")
 
     return variant
