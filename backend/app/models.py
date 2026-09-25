@@ -86,4 +86,76 @@ class ProductVariant(Base):
     is_available = Column( Boolean, nullable=False, default=True,)
     is_active = Column(Boolean, nullable=False,default=True,)
     product = relationship("Product", back_populates="variants")
-    size = relationship("Size", back_populates="variants",)
+    size = relationship("Size", back_populates="variants")
+    cart_items = relationship("CartItem", back_populates="product_variant")
+    
+    
+class Cart(Base):
+    __tablename__ = "carts"
+
+    __table_args__ = (
+        Index(
+            "uq_carts_active_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("is_active = 1"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    is_active = Column(
+        Boolean,
+        nullable=False,
+        default=True,
+        index=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    user = relationship("User", back_populates="carts")
+
+    items = relationship(
+        "CartItem",
+        back_populates="cart",
+        cascade="all, delete-orphan",
+    )
+    
+    
+class CartItem(Base):
+    __tablename__ = "cart_items"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "cart_id",
+            "product_variant_id",
+            name="uq_cart_items_cart_variant",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    cart_id = Column(Integer, ForeignKey("carts.id"), nullable=False, index=True)
+    product_variant_id = Column(Integer, ForeignKey("product_variants.id"), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    cart = relationship("Cart", back_populates="items")
+    product_variant = relationship("ProductVariant", back_populates="cart_items",)

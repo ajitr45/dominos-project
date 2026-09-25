@@ -150,9 +150,39 @@ class ProductVariantResponse(BaseModel):
 
 
     
-    
 ## Login ##
 
 class LoginRequest(BaseModel):
     identifier: str
     password: str = Field(min_length=6)    
+
+
+#Cart and Cartitem
+
+
+class CartItemCreate(BaseModel):
+    product_variant_id: int = Field(gt=0)
+    quantity: int = Field(default=1, ge=1)
+
+
+class CartItemUpdate(BaseModel):
+    quantity: int = Field(ge=1)
+
+
+class CartItemResponse(BaseModel):
+    id: int
+    product_variant_id: int
+    quantity: int
+    unit_price: int
+    subtotal: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CartResponse(BaseModel):
+    id: int
+    is_active: bool
+    items: list[CartItemResponse] = Field(default_factory=list)
+    total_price: int
+
+    model_config = ConfigDict(from_attributes=True)
