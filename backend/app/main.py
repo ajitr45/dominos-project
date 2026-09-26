@@ -8,6 +8,7 @@ from app.routers.sizes import router as size_router
 from app.routers.cart import router as cart_router
 from app.routers.addresses import router as address_router
 from app.routers.orders import router as orders_router
+from app.routers.payments import router as payment_router
 
 app = FastAPI()
 
@@ -21,7 +22,7 @@ app.include_router(size_router)
 app.include_router(cart_router)
 app.include_router(address_router)
 app.include_router(orders_router)
-
+app.include_router(payment_router)
 
 @app.get("/")
 def home():

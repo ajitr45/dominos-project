@@ -1,5 +1,7 @@
+from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
-from app.models import OrderStatus
+from app.models import OrderStatus, PaymentMethod, PaymentStatus
+
 
 
 # =========================
@@ -277,3 +279,27 @@ class OrderResponse(BaseModel):
     
 class OrderStatusUpdate(BaseModel):
     status: OrderStatus
+    
+ #-------------------Payment----------------------#   
+    
+class PaymentCreate(BaseModel):
+    order_id: int = Field(gt=0)
+    method: PaymentMethod
+
+
+class PaymentUpdate(BaseModel):
+    status: PaymentStatus
+
+
+class PaymentResponse(BaseModel):
+    id: int
+    order_id: int
+    user_id: int
+    amount: int
+    method: PaymentMethod
+    status: PaymentStatus
+    transaction_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

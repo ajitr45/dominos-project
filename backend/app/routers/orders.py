@@ -88,16 +88,23 @@ def update_status(
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
-    order = update_order_status(
-        db=db,
-        order_id=order_id,
-        status=status_data.status,
-    )
-
-    if not order:
-        raise HTTPException(
-            status_code=404,
-            detail="Order not found",
+    try:
+        order = update_order_status(
+            db=db,
+            order_id=order_id,
+            status=status_data.status,
         )
 
-    return order
+        if not order:
+            raise HTTPException(
+                status_code=404,
+                detail="Order not found",
+            )
+
+        return order
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )

@@ -13,8 +13,6 @@ from app.models import (
 from app.schemas import OrderCreate
 
 
-
-
 def create_order(
     db: Session,
     user_id: int,
@@ -86,12 +84,14 @@ def create_order(
 
         order_items.append(order_item)
 
+    # Pricing rules
     delivery_fee = 0
     discount = 0
     tax = 0
 
     total_amount = subtotal + delivery_fee + tax - discount
 
+    # Create order with address snapshot
     order = Order(
         user_id=user_id,
         address_id=address.id,
@@ -111,19 +111,27 @@ def create_order(
         items=order_items,
     )
 
-    db.add(order)
+    try:
+        db.add(order)
 
-    # Remove items from cart after order is prepared
-    for cart_item in cart.items:
-        db.delete(cart_item)
+        # Remove items from cart after order is prepared
+        for cart_item in cart.items:
+            db.delete(cart_item)
 
-    db.commit()
-    db.refresh(order)
+        db.commit()
+        db.refresh(order)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return order
 
 
-def get_user_orders(db: Session, user_id: int):
+def get_user_orders(
+    db: Session,
+    user_id: int,
+):
     orders = (
         db.query(Order)
         .options(
@@ -160,7 +168,12 @@ def get_user_order(
 
     return order
 
-def update_order_status(db: Session, order_id: int, status: OrderStatus):
+
+def update_order_status(
+    db: Session,
+    order_id: int,
+    status: OrderStatus,
+):
     order = (
         db.query(Order)
         .filter(Order.id == order_id)
@@ -170,9 +183,44 @@ def update_order_status(db: Session, order_id: int, status: OrderStatus):
     if not order:
         return None
 
+    allowed_transitions = {
+        OrderStatus.PENDING: {
+            OrderStatus.CONFIRMED,
+            OrderStatus.CANCELLED,
+        },
+        OrderStatus.CONFIRMED: {
+            OrderStatus.PREPARING,
+            OrderStatus.CANCELLED,
+        },
+        OrderStatus.PREPARING: {
+            OrderStatus.OUT_FOR_DELIVERY,
+        },
+        OrderStatus.OUT_FOR_DELIVERY: {
+            OrderStatus.DELIVERED,
+        },
+        OrderStatus.DELIVERED: set(),
+        OrderStatus.CANCELLED: set(),
+    }
+
+    current_status = order.status
+
+    if current_status not in allowed_transitions:
+        raise ValueError("Invalid current order status")
+
+    if status not in allowed_transitions[current_status]:
+        raise ValueError(
+            f"Cannot change order status "
+            f"from {current_status.value} to {status.value}"
+        )
+
     order.status = status
 
-    db.commit()
-    db.refresh(order)
+    try:
+        db.commit()
+        db.refresh(order)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return order

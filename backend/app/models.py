@@ -249,6 +249,7 @@ class Order(Base):
     user = relationship("User", back_populates="orders")
     address = relationship("Address")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    payment = relationship("Payment", back_populates="order", uselist=False, cascade="all, delete-orphan")
 
 
 class OrderItem(Base):
@@ -282,3 +283,89 @@ class OrderItem(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     order = relationship("Order", back_populates="items")
     product_variant = relationship("ProductVariant")
+    
+    
+#-------------------------Payment Details-------------------------#
+
+class PaymentStatus(str, Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class PaymentMethod(str, Enum):
+    COD = "cod"
+    ONLINE = "online"
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    order_id = Column(
+        Integer,
+        ForeignKey("orders.id"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    amount = Column(Integer, nullable=False)
+
+    method = Column(
+        SQLEnum(
+            PaymentMethod,
+            values_callable=lambda enum_class: [
+                member.value for member in enum_class
+            ],
+        ),
+        nullable=False,
+    )
+
+    status = Column(
+        SQLEnum(
+            PaymentStatus,
+            values_callable=lambda enum_class: [
+                member.value for member in enum_class
+            ],
+        ),
+        nullable=False,
+        default=PaymentStatus.PENDING,
+        index=True,
+    )
+
+    transaction_id = Column(
+        String(255),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    order = relationship(
+        "Order",
+        back_populates="payment",
+    )
+
+    user = relationship("User")
