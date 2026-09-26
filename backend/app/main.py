@@ -6,6 +6,8 @@ from app.routers.products import router as product_router
 from app.routers.product_variants import router as product_variant_router
 from app.routers.sizes import router as size_router
 from app.routers.cart import router as cart_router
+from app.routers.addresses import router as address_router
+from app.routers.orders import router as orders_router
 
 app = FastAPI()
 
@@ -17,6 +19,8 @@ app.include_router(product_router)
 app.include_router(product_variant_router)
 app.include_router(size_router)
 app.include_router(cart_router)
+app.include_router(address_router)
+app.include_router(orders_router)
 
 
 @app.get("/")
