@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
+from app.models import OrderStatus
 
 
 # =========================
@@ -186,3 +187,93 @@ class CartResponse(BaseModel):
     total_price: int
 
     model_config = ConfigDict(from_attributes=True)
+    
+
+class AddressCreate(BaseModel):
+    label: str = Field(min_length=2, max_length=30)
+    recipient_name: str = Field(min_length=2, max_length=100)
+    phone: str = Field(min_length=10, max_length=20)
+    address_line1: str = Field(min_length=5, max_length=255)
+    address_line2: str | None = Field(default=None, max_length=255)
+    landmark: str | None = Field(default=None, max_length=150)
+    city: str = Field(min_length=2, max_length=100)
+    state: str = Field(min_length=2, max_length=100)
+    postal_code: str = Field(min_length=4, max_length=10)
+    is_default: bool = False
+
+
+class AddressUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=2, max_length=30)
+    recipient_name: str | None = Field(default=None, min_length=2, max_length=100)
+    phone: str | None = Field(default=None, min_length=10, max_length=20)
+    address_line1: str | None = Field(default=None, min_length=5, max_length=255,)
+    address_line2: str | None = Field(default=None, max_length=255)
+    landmark: str | None = Field(default=None, max_length=150)
+    city: str | None = Field(default=None, min_length=2, max_length=100)
+    state: str | None = Field(default=None, min_length=2, max_length=100)
+    postal_code: str | None = Field(default=None, min_length=4, max_length=10)
+    is_default: bool | None = None
+
+
+class AddressResponse(BaseModel):
+    id: int
+    label: str
+    recipient_name: str
+    phone: str
+    address_line1: str
+    address_line2: str | None
+    landmark: str | None
+    city: str
+    state: str
+    postal_code: str
+    is_default: bool
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+    
+    
+#---------------Order Record----------------#
+
+class OrderCreate(BaseModel):
+    address_id: int = Field(gt=0)
+    
+
+class OrderItemResponse(BaseModel):
+    id: int
+    product_variant_id: int
+    product_name: str
+    size_name: str
+    unit_price: int
+    quantity: int
+    subtotal: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderResponse(BaseModel):
+    id: int
+    address_id: int
+    status: str
+
+    subtotal: int
+    delivery_fee: int
+    discount: int
+    tax: int
+    total_amount: int
+
+    recipient_name: str
+    phone: str
+    address_line1: str
+    address_line2: str | None
+    landmark: str | None
+    city: str
+    state: str
+    postal_code: str
+
+    items: list[OrderItemResponse] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+    
+    
+class OrderStatusUpdate(BaseModel):
+    status: OrderStatus
