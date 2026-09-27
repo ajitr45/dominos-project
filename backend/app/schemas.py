@@ -155,23 +155,23 @@ class ProductVariantResponse(BaseModel):
 
 
     
-## Login ##
+#------------------- Login---------------------#
 
 class LoginRequest(BaseModel):
     identifier: str
     password: str = Field(min_length=6)    
 
 
-#Cart and Cartitem
+#-------------------------Cart and Cartitem------------------------#
 
 
 class CartItemCreate(BaseModel):
     product_variant_id: int = Field(gt=0)
-    quantity: int = Field(default=1, ge=1)
+    quantity: int = Field(default=1, ge=1, le=20)
 
 
 class CartItemUpdate(BaseModel):
-    quantity: int = Field(ge=1)
+    quantity: int = Field(ge=1, le=20)
 
 
 class CartItemResponse(BaseModel):
@@ -192,6 +192,7 @@ class CartResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
     
+#--------------------Address-------------------------#
 
 class AddressCreate(BaseModel):
     label: str = Field(min_length=2, max_length=30)

@@ -1,11 +1,14 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
-from app.models import  Cart, CartItem, Product, ProductVariant
+from app.models import Cart, CartItem, Product, ProductVariant
 from app.schemas import CartItemCreate, CartItemUpdate
 
 
+MAX_CART_ITEM_QUANTITY = 20
+
+
 def get_or_create_active_cart(db: Session, user_id: int) -> Cart:
-    
+
     # Find user's existing active cart
     cart = (
         db.query(Cart)
@@ -31,6 +34,7 @@ def get_or_create_active_cart(db: Session, user_id: int) -> Cart:
         db.add(cart)
         db.commit()
         db.refresh(cart)
+
     except IntegrityError:
         db.rollback()
 
@@ -42,10 +46,7 @@ def get_or_create_active_cart(db: Session, user_id: int) -> Cart:
                 .selectinload(CartItem.product_variant)
                 .selectinload(ProductVariant.product)
             )
-            .filter(
-                Cart.user_id == user_id,
-                Cart.is_active.is_(True),
-            )
+            .filter(Cart.user_id == user_id, Cart.is_active.is_(True))
             .first()
         )
 
@@ -71,27 +72,29 @@ def build_cart_response(cart: Cart) -> dict:
         unit_price = cart_item.product_variant.price
         subtotal = unit_price * cart_item.quantity
 
-        items.append(
-            {
-                "id": cart_item.id,
-                "product_variant_id": cart_item.product_variant_id,
-                "quantity": cart_item.quantity,
-                "unit_price": unit_price,
-                "subtotal": subtotal,
-            }
-        )
+        item_data = {
+            "id": cart_item.id,
+            "product_variant_id": cart_item.product_variant_id,
+            "quantity": cart_item.quantity,
+            "unit_price": unit_price,
+            "subtotal": subtotal,
+        }
 
+        items.append(item_data)
         total_price += subtotal
 
-    return {
+    cart_data = {
         "id": cart.id,
         "is_active": cart.is_active,
         "items": items,
         "total_price": total_price,
     }
 
+    return cart_data
+
 
 def get_cart(db: Session, user_id: int) -> dict:
+
     cart = (
         db.query(Cart)
         .options(
@@ -99,25 +102,28 @@ def get_cart(db: Session, user_id: int) -> dict:
             .selectinload(CartItem.product_variant)
             .selectinload(ProductVariant.product)
         )
-        .filter(
-            Cart.user_id == user_id,
-            Cart.is_active.is_(True),
-        )
+        .filter(Cart.user_id == user_id, Cart.is_active.is_(True))
         .first()
     )
 
     if not cart:
-        cart = get_or_create_active_cart(db, user_id)
+        cart = get_or_create_active_cart(db=db, user_id=user_id,)
 
-    return build_cart_response(cart)
+    cart_response = build_cart_response(cart)
+
+    return cart_response
 
 
-def add_item_to_cart(db: Session, user_id: int, item_data: CartItemCreate) -> dict:
-    
+def add_item_to_cart(
+    db: Session,
+    user_id: int,
+    item_data: CartItemCreate,
+) -> dict:
+
     # Get or create user's active cart
-    cart = get_or_create_active_cart(db, user_id)
+    cart = get_or_create_active_cart(db=db, user_id=user_id)
 
-    # Validate product variant and its product
+    # Validate product variant and product availability
     variant = (
         db.query(ProductVariant)
         .join(Product)
@@ -134,7 +140,7 @@ def add_item_to_cart(db: Session, user_id: int, item_data: CartItemCreate) -> di
     if not variant:
         raise ValueError("Product variant is not available")
 
-    # Check if this variant already exists in cart
+    # Check whether this variant already exists in cart
     cart_item = (
         db.query(CartItem)
         .filter(
@@ -145,11 +151,21 @@ def add_item_to_cart(db: Session, user_id: int, item_data: CartItemCreate) -> di
     )
 
     if cart_item:
-        
+
+        # Calculate new total quantity
+        new_quantity = cart_item.quantity + item_data.quantity
+
+        if new_quantity > MAX_CART_ITEM_QUANTITY:
+            raise ValueError(
+                f"Maximum quantity per item is {MAX_CART_ITEM_QUANTITY}"
+            )
+
         # Existing item → increase quantity
-        cart_item.quantity += item_data.quantity
+        cart_item.quantity = new_quantity
+
     else:
-        # New item → create cart item
+
+        # New item
         cart_item = CartItem(
             cart_id=cart.id,
             product_variant_id=variant.id,
@@ -160,11 +176,14 @@ def add_item_to_cart(db: Session, user_id: int, item_data: CartItemCreate) -> di
 
     try:
         db.commit()
+
     except IntegrityError:
         db.rollback()
         raise ValueError("Cart item could not be added")
 
-    return get_cart(db, user_id)
+    cart_response = get_cart(db=db, user_id=user_id)
+
+    return cart_response
 
 
 def update_cart_item(
@@ -173,8 +192,8 @@ def update_cart_item(
     cart_item_id: int,
     item_data: CartItemUpdate,
 ) -> dict:
-    
-    cart = get_or_create_active_cart(db, user_id)
+
+    cart = get_or_create_active_cart(db=db, user_id=user_id)
 
     cart_item = (
         db.query(CartItem)
@@ -188,16 +207,22 @@ def update_cart_item(
     if not cart_item:
         raise ValueError("Cart item not found")
 
-    # Replace quantity
+    # Replace existing quantity
+    if item_data.quantity > MAX_CART_ITEM_QUANTITY:
+        raise ValueError(f"Maximum quantity per item is {MAX_CART_ITEM_QUANTITY}")
+
     cart_item.quantity = item_data.quantity
 
     try:
         db.commit()
+
     except IntegrityError:
         db.rollback()
         raise ValueError("Cart item could not be updated")
 
-    return get_cart(db, user_id)
+    cart_response = get_cart(db=db, user_id=user_id)
+
+    return cart_response
 
 
 def remove_cart_item(
@@ -205,8 +230,8 @@ def remove_cart_item(
     user_id: int,
     cart_item_id: int,
 ) -> dict:
-    
-    cart = get_or_create_active_cart(db, user_id)
+
+    cart = get_or_create_active_cart(db=db, user_id=user_id)
 
     cart_item = (
         db.query(CartItem)
@@ -224,8 +249,11 @@ def remove_cart_item(
 
     try:
         db.commit()
+
     except IntegrityError:
         db.rollback()
         raise ValueError("Cart item could not be removed")
 
-    return get_cart(db, user_id)
+    cart_response = get_cart(db=db, user_id=user_id)
+
+    return cart_response
