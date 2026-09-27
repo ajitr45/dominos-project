@@ -52,10 +52,10 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     description = Column(String(500), nullable=True)
-    is_active = Column(Boolean, nullable=False, default=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow,)
-    products = relationship("Product", back_populates="category",)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    products = relationship("Product", back_populates="category")
 
 
 class Product(Base):
