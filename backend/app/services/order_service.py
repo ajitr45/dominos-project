@@ -1,24 +1,10 @@
 from sqlalchemy.orm import Session, selectinload
-
-from app.models import (
-    Cart,
-    CartItem,
-    Order,
-    OrderItem,
-    Address,
-    OrderStatus,
-    ProductVariant,
-    Product,
-)
+from app.models import (Cart, CartItem, Order, OrderItem, Address, OrderStatus, ProductVariant, Product)
 from app.schemas import OrderCreate
 
 
-def create_order(
-    db: Session,
-    user_id: int,
-    order_data: OrderCreate,
-):
-    # Get active cart with products and variants
+def create_order(db: Session, user_id: int, order_data: OrderCreate):
+    # Get user's active cart with product and variant details
     cart = (
         db.query(Cart)
         .options(
@@ -39,7 +25,7 @@ def create_order(
     if not cart.items:
         raise ValueError("Cart is empty")
 
-    # Get selected address
+    # Get user's active address
     address = (
         db.query(Address)
         .filter(
@@ -60,19 +46,23 @@ def create_order(
         variant = cart_item.product_variant
         product = variant.product
 
+        # Validate variant availability
         if not variant.is_active or not variant.is_available:
             raise ValueError(
                 f"Product variant {variant.id} is not available"
             )
 
+        # Validate product availability
         if not product.is_active or not product.is_available:
             raise ValueError(
                 f"Product {product.id} is not available"
             )
 
+        # Calculate item subtotal
         item_subtotal = variant.price * cart_item.quantity
         subtotal += item_subtotal
 
+        # Create order item snapshot
         order_item = OrderItem(
             product_variant_id=variant.id,
             product_name=product.name,
@@ -89,7 +79,12 @@ def create_order(
     discount = 0
     tax = 0
 
-    total_amount = subtotal + delivery_fee + tax - discount
+    total_amount = (
+        subtotal
+        + delivery_fee
+        + tax
+        - discount
+    )
 
     # Create order with address snapshot
     order = Order(
@@ -114,10 +109,11 @@ def create_order(
     try:
         db.add(order)
 
-        # Remove items from cart after order is prepared
+        # Clear cart after preparing the order
         for cart_item in cart.items:
             db.delete(cart_item)
 
+        # Commit order creation and cart clearing together
         db.commit()
         db.refresh(order)
 
@@ -125,28 +121,23 @@ def create_order(
         db.rollback()
         raise
 
-    return order
+    created_order = order
+
+    return created_order
 
 
-def get_user_orders(
-    db: Session,
-    user_id: int,
-):
+def get_user_orders(db: Session, user_id: int,):
     orders = (
         db.query(Order)
-        .options(
-            selectinload(Order.items)
-        )
-        .filter(
-            Order.user_id == user_id
-        )
-        .order_by(
-            Order.created_at.desc()
-        )
+        .options(selectinload(Order.items))
+        .filter(Order.user_id == user_id)
+        .order_by(Order.created_at.desc())
         .all()
     )
 
-    return orders
+    user_orders = orders
+
+    return user_orders
 
 
 def get_user_order(
@@ -156,9 +147,7 @@ def get_user_order(
 ):
     order = (
         db.query(Order)
-        .options(
-            selectinload(Order.items)
-        )
+        .options(selectinload(Order.items))
         .filter(
             Order.id == order_id,
             Order.user_id == user_id,
@@ -166,14 +155,12 @@ def get_user_order(
         .first()
     )
 
-    return order
+    user_order = order
+
+    return user_order
 
 
-def update_order_status(
-    db: Session,
-    order_id: int,
-    status: OrderStatus,
-):
+def update_order_status(db: Session, order_id: int, status: OrderStatus):
     order = (
         db.query(Order)
         .filter(Order.id == order_id)
@@ -223,4 +210,6 @@ def update_order_status(
         db.rollback()
         raise
 
-    return order
+    updated_order = order
+
+    return updated_order
