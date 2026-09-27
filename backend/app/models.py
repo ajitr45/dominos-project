@@ -65,10 +65,10 @@ class Product(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     image = Column(String, nullable=True)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     is_veg = Column(Boolean, nullable=False, default=True)
-    is_available = Column(Boolean, nullable=False, default=True,)
-    is_active = Column(Boolean, nullable=False, default=True)
+    is_available = Column(Boolean, nullable=False, default=True, index=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
     category = relationship("Category", back_populates="products")
     variants = relationship("ProductVariant", back_populates="product")
 
