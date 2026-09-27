@@ -14,6 +14,7 @@ from app.services.category_service import (
     get_categories,
     get_category_by_id,
     update_category,
+    deactivate_category
 )
 from app.dependencies.auth import require_admin
 
@@ -136,21 +137,31 @@ def update_category_api(
     response_model=CategoryResponse,
 )
 def deactivate_category(
-    db: Session,
-    category: Category,
-) -> Category:
+    category_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    category = get_category_by_id(
+        db=db,
+        category_id=category_id,
+    )
 
-    if not category.is_active:
-        raise ValueError("Category is already inactive")
-
-    category.is_active = False
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found",
+        )
 
     try:
-        db.commit()
-        db.refresh(category)
+        deactivated_category = deactivate_category(
+            db=db,
+            category=category,
+        )
 
-    except  :
-        db.rollback()
-        raise ValueError("Category could not be deactivated")
+        return deactivated_category
 
-    return category
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
