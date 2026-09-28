@@ -1,14 +1,33 @@
+import razorpay
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Payment, PaymentStatus, Order
-from app.schemas import PaymentCreate, PaymentUpdate
+from app.core.config import (
+    RAZORPAY_KEY_ID,
+    RAZORPAY_KEY_SECRET,
+    RAZORPAY_WEBHOOK_SECRET,
+)
+
+from app.models import (
+    Payment,
+    PaymentMethod,
+    PaymentStatus,
+    Order,
+    OrderStatus,
+)
+
+from app.schemas import (
+    PaymentCreate,
+    PaymentUpdate,
+)
 
 
-def create_payment(
-    db: Session,
-    user_id: int,
-    payment_data: PaymentCreate,
-):
+razorpay_client = razorpay.Client(
+    auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)
+)
+
+
+def create_payment(db: Session, user_id: int, payment_data: PaymentCreate):
     # Get user's order
     order = (
         db.query(Order)
@@ -22,45 +41,168 @@ def create_payment(
     if not order:
         raise ValueError("Order not found")
 
-    # Prevent payment for cancelled orders
-    if order.status == "cancelled":
-        raise ValueError(
-            "Cannot create payment for cancelled order"
-        )
+    # Payment cannot be created for cancelled orders
+    if order.status == OrderStatus.CANCELLED:
+        raise ValueError("Cannot create payment for cancelled order")
+
+    # Payment cannot be created after order is delivered
+    if order.status == OrderStatus.DELIVERED:
+        raise ValueError("Cannot create payment for delivered order")
 
     # Prevent duplicate payment
     existing_payment = (
         db.query(Payment)
-        .filter(
-            Payment.order_id == order.id,
-        )
+        .filter(Payment.order_id == order.id)
         .first()
     )
 
     if existing_payment:
-        raise ValueError(
-            "Payment already exists for this order"
+        raise ValueError("Payment already exists for this order")
+
+    # --------------------------------------------------
+    # COD PAYMENT
+    # --------------------------------------------------
+
+    if payment_data.method == PaymentMethod.COD:
+
+        payment = Payment(
+            order_id=order.id,
+            user_id=user_id,
+            amount=order.total_amount,
+            method=PaymentMethod.COD,
+            status=PaymentStatus.PENDING,
         )
 
-    # Create payment
-    payment = Payment(
-        order_id=order.id,
-        user_id=user_id,
-        amount=order.total_amount,
-        method=payment_data.method,
-        status=PaymentStatus.PENDING,
+        try:
+            db.add(payment)
+            db.commit()
+            db.refresh(payment)
+
+        except IntegrityError:
+            db.rollback()
+            raise ValueError("Payment could not be created")
+
+        created_payment = payment
+
+        return created_payment
+
+    # --------------------------------------------------
+    # ONLINE PAYMENT - RAZORPAY
+    # --------------------------------------------------
+
+    if payment_data.method == PaymentMethod.ONLINE:
+
+        razorpay_order_data = {
+            "amount": order.total_amount * 100,
+            "currency": "INR",
+            "receipt": f"order_{order.id}",
+        }
+
+        # Create Razorpay order
+        try:
+            razorpay_order = razorpay_client.order.create(
+                data=razorpay_order_data
+            )
+
+        except Exception as exc:
+            print("RAZORPAY ERROR:", repr(exc))
+            raise ValueError(
+                "Unable to create Razorpay order"
+            ) from exc
+
+        payment = Payment(
+            order_id=order.id,
+            user_id=user_id,
+            amount=order.total_amount,
+            method=PaymentMethod.ONLINE,
+            status=PaymentStatus.PENDING,
+            razorpay_order_id=razorpay_order["id"],
+        )
+
+        try:
+            db.add(payment)
+            db.commit()
+            db.refresh(payment)
+
+        except IntegrityError:
+            db.rollback()
+            raise ValueError("Payment could not be created")
+
+        payment_data_response = {
+            "payment_id": payment.id,
+            "order_id": order.id,
+            "amount": payment.amount,
+            "currency": "INR",
+            "method": payment.method,
+            "status": payment.status,
+            "razorpay_key_id": RAZORPAY_KEY_ID,
+            "razorpay_order_id": payment.razorpay_order_id,
+        }
+
+        return payment_data_response
+
+    raise ValueError("Invalid payment method")
+
+
+def verify_razorpay_payment(
+    db: Session,
+    user_id: int,
+    payment_id: int,
+    razorpay_payment_id: str,
+    razorpay_order_id: str,
+    razorpay_signature: str,
+):
+    payment = (
+        db.query(Payment)
+        .filter(
+            Payment.id == payment_id,
+            Payment.user_id == user_id,
+            Payment.method == PaymentMethod.ONLINE,
+        )
+        .first()
     )
 
+    if not payment:
+        raise ValueError("Payment not found")
+
+    if payment.status != PaymentStatus.PENDING:
+        raise ValueError("Payment is not in pending state")
+
+    if payment.razorpay_order_id != razorpay_order_id:
+        raise ValueError("Razorpay order ID does not match")
+
     try:
-        db.add(payment)
+        razorpay_client.utility.verify_payment_signature(
+            {
+                "razorpay_payment_id": razorpay_payment_id,
+                "razorpay_order_id": razorpay_order_id,
+                "razorpay_signature": razorpay_signature,
+            }
+        )
+
+    except Exception as exc:
+        raise ValueError(
+            "Invalid Razorpay payment signature"
+        ) from exc
+
+    payment.razorpay_payment_id = razorpay_payment_id
+    payment.razorpay_signature = razorpay_signature
+    payment.transaction_id = razorpay_payment_id
+    payment.status = PaymentStatus.PAID
+
+    try:
         db.commit()
         db.refresh(payment)
 
-    except Exception:
+    except IntegrityError:
         db.rollback()
-        raise
+        raise ValueError(
+            "Payment verification could not be completed"
+        )
 
-    return payment
+    verified_payment = payment
+
+    return verified_payment
 
 
 def get_user_payments(db: Session, user_id: int):
@@ -71,13 +213,12 @@ def get_user_payments(db: Session, user_id: int):
         .all()
     )
 
-    return payments
+    user_payments = payments
 
-def get_payment(
-    db: Session,
-    user_id: int,
-    payment_id: int,
-):
+    return user_payments
+
+
+def get_payment(db: Session, user_id: int, payment_id: int):
     payment = (
         db.query(Payment)
         .filter(
@@ -87,7 +228,9 @@ def get_payment(
         .first()
     )
 
-    return payment
+    user_payment = payment
+
+    return user_payment
 
 
 def update_payment_status(
@@ -97,12 +240,24 @@ def update_payment_status(
 ):
     payment = (
         db.query(Payment)
-        .filter(Payment.id == payment_id)
+        .filter(
+            Payment.id == payment_id,
+        )
         .first()
     )
 
     if not payment:
         return None
+
+    # Online PAID status must come through
+    # Razorpay verification/webhook, not manual API update.
+    if (
+        payment.method == PaymentMethod.ONLINE
+        and payment_data.status == PaymentStatus.PAID
+    ):
+        raise ValueError(
+            "Online payment must be verified through Razorpay"
+        )
 
     current_status = payment.status
     new_status = payment_data.status
@@ -124,8 +279,9 @@ def update_payment_status(
 
     if new_status not in allowed_transitions[current_status]:
         raise ValueError(
-            f"Cannot change payment status from "
-            f"{current_status.value} to {new_status.value}"
+            f"Cannot change payment status "
+            f"from {current_status.value} "
+            f"to {new_status.value}"
         )
 
     payment.status = new_status
@@ -133,8 +289,93 @@ def update_payment_status(
     try:
         db.commit()
         db.refresh(payment)
-    except Exception:
-        db.rollback()
-        raise
 
-    return payment
+    except IntegrityError:
+        db.rollback()
+        raise ValueError(
+            "Payment status could not be updated"
+        )
+
+    updated_payment = payment
+
+    return updated_payment
+
+
+def process_razorpay_webhook(
+    db: Session,
+    payload: str,
+    webhook_signature: str,
+):
+    try:
+        razorpay_client.utility.verify_webhook_signature(
+            payload,
+            webhook_signature,
+            RAZORPAY_WEBHOOK_SECRET,
+        )
+
+    except Exception as exc:
+        raise ValueError(
+            "Invalid Razorpay webhook signature"
+        ) from exc
+
+    import json
+
+    webhook_data = json.loads(payload)
+
+    event = webhook_data.get("event")
+
+    payment_entity = (
+        webhook_data
+        .get("payload", {})
+        .get("payment", {})
+        .get("entity", {})
+    )
+
+    razorpay_payment_id = payment_entity.get("id")
+    razorpay_order_id = payment_entity.get("order_id")
+
+    if not razorpay_payment_id or not razorpay_order_id:
+        raise ValueError("Invalid Razorpay webhook payload")
+
+    payment = (
+        db.query(Payment)
+        .filter(
+            Payment.razorpay_order_id == razorpay_order_id
+        )
+        .first()
+    )
+
+    if not payment:
+        raise ValueError("Payment not found")
+
+    # Ignore duplicate webhook events safely.
+    if payment.status == PaymentStatus.PAID:
+        existing_payment = payment
+        return existing_payment
+
+    if event == "payment.captured":
+        payment.razorpay_payment_id = razorpay_payment_id
+        payment.transaction_id = razorpay_payment_id
+        payment.status = PaymentStatus.PAID
+
+    elif event == "payment.failed":
+        payment.razorpay_payment_id = razorpay_payment_id
+        payment.status = PaymentStatus.FAILED
+
+    else:
+        existing_payment = payment
+        return existing_payment
+
+    try:
+        db.commit()
+        db.refresh(payment)
+
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError(
+            "Webhook payment update could not be completed"
+        ) from exc
+
+    processed_payment = payment
+
+    return processed_payment
