@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas import LoginRequest, UserCreate, UserResponse
-from app.services.auth_service import authenticate_user, register_user
+from app.schemas import ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, UserCreate, UserResponse
+from app.services.auth_service import authenticate_user, create_password_reset_token, register_user, reset_password
 from app.core.security import create_access_token
 
 
@@ -43,3 +43,37 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
             "phone": user.phone,
         },
     }
+    
+@router.post("/forgot-password")
+def forgot_password(password_data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        created_token = create_password_reset_token(db=db, email=password_data.email)
+
+        response = {
+            "message": (
+                "If the account exists, a password reset link "
+                "has been sent."
+            )
+        }
+
+        return response
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    
+    
+@router.post("/reset-password")
+def reset_user_password(password_data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    
+    try:
+        updated_user = reset_password(db=db, token=password_data.token, new_password=password_data.new_password)
+
+        response = {
+            "message": "Password reset successfully",
+            "user_id": updated_user.id,
+        }
+
+        return response
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
