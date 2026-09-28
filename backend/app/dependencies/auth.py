@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.models import User, UserRole
@@ -35,8 +36,19 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Validate user ID from JWT
+    try:
+        user_id = int(user_id)
+
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Find the authenticated user
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = (db.query(User).filter(User.id == user_id).first())
 
     if not user:
         raise HTTPException(
@@ -47,14 +59,13 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
     # Do not allow inactive users to access protected APIs
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
 
     return user
 
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
+
     # Only admin users can access admin-protected APIs
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
@@ -63,9 +74,9 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_delivery_boy(current_user: User = Depends(get_current_user)) -> User:
-     # Only delivery boys can access delivery-specific APIs
+
+    # Only delivery boys can access delivery-specific APIs
     if current_user.role != UserRole.DELIVERY_BOY:
-        
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Delivery boy access required")
 
     return current_user

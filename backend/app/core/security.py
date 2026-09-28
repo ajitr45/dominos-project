@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import jwt
 from pwdlib import PasswordHash
-from app.core.config import JWT_ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM, JWT_SECRET_KEY
+from app.core.config import (JWT_ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM, JWT_SECRET_KEY)
 
 
 password_hash = PasswordHash.recommended()
@@ -26,12 +26,13 @@ def create_access_token(user_id: int) -> str:
         "exp": expire,
     }
 
-    return jwt.encode(
-        payload,
-        JWT_SECRET_KEY,
-        algorithm=JWT_ALGORITHM,
-    )
-    
+    token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+    return token
+
+
 def decode_access_token(token: str) -> dict:
     # Verify JWT signature and expiration
-    return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+
+    return payload
