@@ -35,6 +35,45 @@ class User(Base):
     carts = relationship("Cart", back_populates="user")
     addresses = relationship("Address", back_populates="user")
     orders = relationship("Order", back_populates="user")
+    
+    
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    token_hash = Column(
+        String(255),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    expires_at = Column(
+        DateTime,
+        nullable=False,
+        index=True,
+    )
+
+    used_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    user = relationship("User")
 
 
 class Size(Base):
@@ -303,30 +342,13 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
-
-    order_id = Column(
-        Integer,
-        ForeignKey("orders.id"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-
-    user_id = Column(
-        Integer,
-        ForeignKey("users.id"),
-        nullable=False,
-        index=True,
-    )
-
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, unique=True, index=True,)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     amount = Column(Integer, nullable=False)
-
     method = Column(
         SQLEnum(
             PaymentMethod,
-            values_callable=lambda enum_class: [
-                member.value for member in enum_class
-            ],
+            values_callable=lambda enum_class: [member.value for member in enum_class],
         ),
         nullable=False,
     )
@@ -334,38 +356,26 @@ class Payment(Base):
     status = Column(
         SQLEnum(
             PaymentStatus,
-            values_callable=lambda enum_class: [
-                member.value for member in enum_class
-            ],
+            values_callable=lambda enum_class: [member.value for member in enum_class],
         ),
         nullable=False,
         default=PaymentStatus.PENDING,
         index=True,
     )
 
-    transaction_id = Column(
-        String(255),
-        nullable=True,
-        unique=True,
-        index=True,
-    )
+    # Generic transaction/reference ID
+    transaction_id = Column(String(255), nullable=True, unique=True, index=True)
 
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
+    # Razorpay order created by backend
+    razorpay_order_id = Column(String(255), nullable=True, unique=True, index=True)
 
-    updated_at = Column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-    )
+    # Razorpay payment ID received after successful payment
+    razorpay_payment_id = Column(String(255), nullable=True, unique=True, index=True)
 
-    order = relationship(
-        "Order",
-        back_populates="payment",
-    )
+    # Razorpay signature used for payment verification
+    razorpay_signature = Column(String(255), nullable=True)
 
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    order = relationship("Order", back_populates="payment")
     user = relationship("User")
