@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from app.models import OrderStatus, PaymentMethod, PaymentStatus
 
 
@@ -302,7 +302,41 @@ class PaymentResponse(BaseModel):
     method: PaymentMethod
     status: PaymentStatus
     transaction_id: str | None
+    razorpay_order_id: str | None
+    razorpay_payment_id: str | None
+    razorpay_signature: str | None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RazorpayPaymentResponse(BaseModel):
+    payment_id: int
+    order_id: int
+    amount: int
+    currency: str
+    method: PaymentMethod
+    status: PaymentStatus
+    razorpay_key_id: str
+    razorpay_order_id: str
+
+
+class RazorpayPaymentVerify(BaseModel):
+    razorpay_payment_id: str = Field(min_length=1)
+    razorpay_order_id: str = Field(min_length=1)
+    razorpay_signature: str = Field(min_length=1)
+    
+    
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=6)
+    new_password: str = Field(min_length=6)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1)
+    new_password: str = Field(min_length=6)
