@@ -73,10 +73,40 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def require_customer(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.CUSTOMER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer access required",
+        )
+
+    return current_user
+
+
 def require_delivery_boy(current_user: User = Depends(get_current_user)) -> User:
 
     # Only delivery boys can access delivery-specific APIs
     if current_user.role != UserRole.DELIVERY_BOY:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Delivery boy access required")
+
+    return current_user
+
+
+def require_manager(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.MANAGER:
+        raise HTTPException(
+            status_code=403,
+            detail="Manager access required",
+        )
+
+    return current_user
+
+
+def require_admin_or_manager(current_user: User = Depends(get_current_user),) -> User:
+    if current_user.role not in (
+        UserRole.ADMIN,
+        UserRole.MANAGER,
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or manager access required")
 
     return current_user

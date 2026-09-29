@@ -1,5 +1,6 @@
+from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
-from app.models import (Cart, CartItem, Order, OrderItem, Address, OrderStatus, ProductVariant, Product)
+from app.models import (Cart, CartItem, Order, OrderItem, Address, OrderStatus, ProductVariant, Product, User, UserRole)
 from app.schemas import OrderCreate
 
 
@@ -12,10 +13,7 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
             .selectinload(CartItem.product_variant)
             .selectinload(ProductVariant.product)
         )
-        .filter(
-            Cart.user_id == user_id,
-            Cart.is_active.is_(True),
-        )
+        .filter(Cart.user_id == user_id, Cart.is_active.is_(True))
         .first()
     )
 
@@ -26,8 +24,7 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
         raise ValueError("Cart is empty")
 
     # Get user's active address
-    address = (
-        db.query(Address)
+    address = (db.query(Address)
         .filter(
             Address.id == order_data.address_id,
             Address.user_id == user_id,
@@ -48,15 +45,11 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
 
         # Validate variant availability
         if not variant.is_active or not variant.is_available:
-            raise ValueError(
-                f"Product variant {variant.id} is not available"
-            )
+            raise ValueError(f"Product variant {variant.id} is not available")
 
         # Validate product availability
         if not product.is_active or not product.is_available:
-            raise ValueError(
-                f"Product {product.id} is not available"
-            )
+            raise ValueError(f"Product {product.id} is not available")
 
         # Calculate item subtotal
         item_subtotal = variant.price * cart_item.quantity
@@ -126,7 +119,7 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
     return created_order
 
 
-def get_user_orders(db: Session, user_id: int,):
+def get_user_orders(db: Session, user_id: int):
     orders = (
         db.query(Order)
         .options(selectinload(Order.items))
@@ -140,18 +133,11 @@ def get_user_orders(db: Session, user_id: int,):
     return user_orders
 
 
-def get_user_order(
-    db: Session,
-    user_id: int,
-    order_id: int,
-):
+def get_user_order(db: Session, user_id: int, order_id: int):
     order = (
         db.query(Order)
         .options(selectinload(Order.items))
-        .filter(
-            Order.id == order_id,
-            Order.user_id == user_id,
-        )
+        .filter(Order.id == order_id, Order.user_id == user_id)
         .first()
     )
 
@@ -160,12 +146,34 @@ def get_user_order(
     return user_order
 
 
-def update_order_status(db: Session, order_id: int, status: OrderStatus):
+def get_all_orders(db: Session):
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    all_orders = orders
+
+    return all_orders
+
+
+def get_order_by_id(db: Session, order_id: int,):
     order = (
         db.query(Order)
+        .options(selectinload(Order.items))
         .filter(Order.id == order_id)
         .first()
     )
+
+    order_by_id = order
+
+    return order_by_id
+
+
+def update_order_status(db: Session, order_id: int, status: OrderStatus):
+    order = (db.query(Order).filter(Order.id == order_id).first())
 
     if not order:
         return None
@@ -198,6 +206,178 @@ def update_order_status(db: Session, order_id: int, status: OrderStatus):
         raise ValueError(
             f"Cannot change order status "
             f"from {current_status.value} to {status.value}"
+        )
+
+    order.status = status
+
+    try:
+        db.commit()
+        db.refresh(order)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    updated_order = order
+
+    return updated_order
+
+
+#-------------Assigned delivery_boy---------------------------#
+
+def assign_delivery_boy(db: Session, order_id: int, delivery_boy_id: int | None):
+    
+    order = (db.query(Order).filter(Order.id == order_id).first())
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Delivered and cancelled orders cannot be assigned or reassigned
+    if order.status in (
+        OrderStatus.DELIVERED,
+        OrderStatus.CANCELLED,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot assign delivery boy to a delivered or cancelled order",
+        )
+
+    # Unassign delivery boy
+    if delivery_boy_id is None:
+        order.delivery_boy_id = None
+
+        try:
+            db.commit()
+            db.refresh(order)
+
+        except Exception:
+            db.rollback()
+            raise
+
+        updated_order = order
+
+        return updated_order
+
+    # Find delivery boy
+    delivery_boy = (db.query(User).filter(User.id == delivery_boy_id).first())
+
+    if not delivery_boy:
+        raise HTTPException(status_code=404, detail="Delivery boy not found")
+
+    # Validate user role
+    if delivery_boy.role != UserRole.DELIVERY_BOY:
+        raise HTTPException(status_code=400, detail="Selected user is not a delivery boy")
+
+    # Validate account status
+    if not delivery_boy.is_active:
+        raise HTTPException(status_code=400, detail="Delivery boy account is inactive")
+
+    # Assign or reassign delivery boy
+    order.delivery_boy_id = delivery_boy.id
+
+    try:
+        db.commit()
+        db.refresh(order)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    assigned_order = order
+
+    return assigned_order
+
+
+
+def get_delivery_boy_orders(db: Session, delivery_boy_id: int):
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(
+            Order.delivery_boy_id == delivery_boy_id,
+            Order.status.notin_(
+                [
+                    OrderStatus.DELIVERED,
+                    OrderStatus.CANCELLED,
+                ]
+            ),
+        )
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    delivery_boy_orders = orders
+
+    return delivery_boy_orders
+
+
+def get_delivery_boy_order_history(db: Session, delivery_boy_id: int):
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(
+            Order.delivery_boy_id == delivery_boy_id,
+            Order.status.in_(
+                [
+                    OrderStatus.DELIVERED,
+                    OrderStatus.CANCELLED,
+                ]
+            ),
+        )
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    delivery_boy_order_history = orders
+
+    return delivery_boy_order_history
+
+
+def update_delivery_order_status(
+    db: Session,
+    order_id: int,
+    delivery_boy_id: int,
+    status: OrderStatus,
+):
+    order = (
+        db.query(Order)
+        .filter(
+            Order.id == order_id,
+            Order.delivery_boy_id == delivery_boy_id,
+        )
+        .first()
+    )
+
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Assigned order not found",
+        )
+
+    allowed_transitions = {
+        OrderStatus.PREPARING: {
+            OrderStatus.OUT_FOR_DELIVERY,
+        },
+        OrderStatus.OUT_FOR_DELIVERY: {
+            OrderStatus.DELIVERED,
+        },
+    }
+
+    current_status = order.status
+
+    if current_status not in allowed_transitions:
+        raise HTTPException(
+            status_code=400,
+            detail="Delivery boy cannot update this order status",
+        )
+
+    if status not in allowed_transitions[current_status]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot change order status "
+                f"from {current_status.value} to {status.value}"
+            ),
         )
 
     order.status = status

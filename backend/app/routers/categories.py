@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies.auth import require_admin_or_manager
 from app.models import Category
 from app.schemas import (CategoryCreate, CategoryUpdate, CategoryResponse)
 from app.services.category_service import (create_category, get_categories, get_category_by_id, update_category, deactivate_category)
-from app.dependencies.auth import require_admin
 
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
@@ -17,13 +16,10 @@ router = APIRouter(prefix="/categories", tags=["Categories"])
 def create_category_api(
     category_data: CategoryCreate,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    current_user=Depends(require_admin_or_manager),
 ):
     try:
-        category = create_category(
-            db=db,
-            category_data=category_data,
-        )
+        category = create_category(db=db, category_data=category_data)
 
         return category
 
@@ -32,27 +28,22 @@ def create_category_api(
 
 
 # Get All Categories
-@router.get("/", response_model=list[CategoryResponse])
+@router.get("/", response_model=list[CategoryResponse],)
 def get_categories_api(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    categories = get_categories(
-        db=db,
-        skip=skip,
-        limit=limit,
-    )
+    
+    categories = get_categories(db=db, skip=skip, limit=limit)
 
     return categories
 
 
 # Get Single Category
-@router.get("/{category_id}", response_model=CategoryResponse)
-def get_category_api(
-    category_id: int,
-    db: Session = Depends(get_db),
-):
+@router.get("/{category_id}", response_model=CategoryResponse,)
+def get_category_api(category_id: int, db: Session = Depends(get_db)):
+    
     category = get_category_by_id(db=db, category_id=category_id)
 
     if not category:
@@ -62,12 +53,12 @@ def get_category_api(
 
 
 # Update Category
-@router.patch("/{category_id}", response_model=CategoryResponse)
+@router.patch("/{category_id}", response_model=CategoryResponse,)
 def update_category_api(
     category_id: int,
     category_data: CategoryUpdate,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    current_user=Depends(require_admin_or_manager),
 ):
     category = get_category_by_id(db=db, category_id=category_id)
 
@@ -85,15 +76,18 @@ def update_category_api(
 
 # Deactivate Category
 @router.patch("/{category_id}/deactivate", response_model=CategoryResponse)
-def deactivate_category(
+def deactivate_category_api(
     category_id: int,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    current_user=Depends(require_admin_or_manager),
 ):
-    category = get_category_by_id(db=db, category_id=category_id,)
+    category = get_category_by_id(db=db, category_id=category_id)
 
     if not category:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found",)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found",
+        )
 
     try:
         deactivated_category = deactivate_category(db=db, category=category)

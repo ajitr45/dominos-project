@@ -1,42 +1,17 @@
 import razorpay
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-from app.core.config import (
-    RAZORPAY_KEY_ID,
-    RAZORPAY_KEY_SECRET,
-    RAZORPAY_WEBHOOK_SECRET,
-)
-
-from app.models import (
-    Payment,
-    PaymentMethod,
-    PaymentStatus,
-    Order,
-    OrderStatus,
-)
-
-from app.schemas import (
-    PaymentCreate,
-    PaymentUpdate,
-)
+from app.core.config import (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET)
+from app.models import (Payment, PaymentMethod, PaymentStatus, Order, OrderStatus)
+from app.schemas import (PaymentCreate, PaymentUpdate)
 
 
-razorpay_client = razorpay.Client(
-    auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)
-)
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 
 def create_payment(db: Session, user_id: int, payment_data: PaymentCreate):
     # Get user's order
-    order = (
-        db.query(Order)
-        .filter(
-            Order.id == payment_data.order_id,
-            Order.user_id == user_id,
-        )
-        .first()
-    )
+    order = (db.query(Order).filter(Order.id == payment_data.order_id, Order.user_id == user_id).first())
 
     if not order:
         raise ValueError("Order not found")
@@ -72,6 +47,8 @@ def create_payment(db: Session, user_id: int, payment_data: PaymentCreate):
             method=PaymentMethod.COD,
             status=PaymentStatus.PENDING,
         )
+        
+        order.status = OrderStatus.CONFIRMED
 
         try:
             db.add(payment)
@@ -189,6 +166,7 @@ def verify_razorpay_payment(
     payment.razorpay_signature = razorpay_signature
     payment.transaction_id = razorpay_payment_id
     payment.status = PaymentStatus.PAID
+    payment.order.status = OrderStatus.CONFIRMED
 
     try:
         db.commit()
@@ -255,9 +233,7 @@ def update_payment_status(
         payment.method == PaymentMethod.ONLINE
         and payment_data.status == PaymentStatus.PAID
     ):
-        raise ValueError(
-            "Online payment must be verified through Razorpay"
-        )
+        raise ValueError("Online payment must be verified through Razorpay")
 
     current_status = payment.status
     new_status = payment_data.status
@@ -301,22 +277,49 @@ def update_payment_status(
     return updated_payment
 
 
-def process_razorpay_webhook(
-    db: Session,
-    payload: str,
-    webhook_signature: str,
-):
+def mark_cod_payment_paid(db: Session, payment_id: int, delivery_boy_id: int):
+    
+    payment = (db.query(Payment).filter(Payment.id == payment_id).first())
+
+    if not payment:
+        raise ValueError("Payment not found")
+
+    if payment.method != PaymentMethod.COD:
+        raise ValueError("Only COD payment can be marked as paid")
+
+    if payment.status != PaymentStatus.PENDING:
+        raise ValueError("COD payment is not in pending state")
+
+    order = (db.query(Order).filter(Order.id == payment.order_id, Order.delivery_boy_id == delivery_boy_id).first())
+
+    if not order:
+        raise ValueError("Order is not assigned to this delivery boy")
+
+    if order.status != OrderStatus.OUT_FOR_DELIVERY:
+        raise ValueError("COD payment can be marked as paid only when order is out for delivery")
+
+    payment.status = PaymentStatus.PAID
+
     try:
-        razorpay_client.utility.verify_webhook_signature(
-            payload,
-            webhook_signature,
-            RAZORPAY_WEBHOOK_SECRET,
-        )
+        db.commit()
+        db.refresh(payment)
+
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("COD payment could not be marked as paid")
+
+    paid_payment = payment
+
+    return paid_payment
+
+
+def process_razorpay_webhook(db: Session, payload: str, webhook_signature: str):
+    
+    try:
+        razorpay_client.utility.verify_webhook_signature(payload, webhook_signature, RAZORPAY_WEBHOOK_SECRET)
 
     except Exception as exc:
-        raise ValueError(
-            "Invalid Razorpay webhook signature"
-        ) from exc
+        raise ValueError("Invalid Razorpay webhook signature") from exc
 
     import json
 
@@ -337,13 +340,7 @@ def process_razorpay_webhook(
     if not razorpay_payment_id or not razorpay_order_id:
         raise ValueError("Invalid Razorpay webhook payload")
 
-    payment = (
-        db.query(Payment)
-        .filter(
-            Payment.razorpay_order_id == razorpay_order_id
-        )
-        .first()
-    )
+    payment = (db.query(Payment).filter(Payment.razorpay_order_id == razorpay_order_id).first())
 
     if not payment:
         raise ValueError("Payment not found")
@@ -357,6 +354,7 @@ def process_razorpay_webhook(
         payment.razorpay_payment_id = razorpay_payment_id
         payment.transaction_id = razorpay_payment_id
         payment.status = PaymentStatus.PAID
+        payment.order.status = OrderStatus.CONFIRMED
 
     elif event == "payment.failed":
         payment.razorpay_payment_id = razorpay_payment_id
@@ -372,9 +370,7 @@ def process_razorpay_webhook(
 
     except IntegrityError as exc:
         db.rollback()
-        raise ValueError(
-            "Webhook payment update could not be completed"
-        ) from exc
+        raise ValueError("Webhook payment update could not be completed") from exc
 
     processed_payment = payment
 

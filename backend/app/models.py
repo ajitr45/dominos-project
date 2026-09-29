@@ -9,6 +9,7 @@ class UserRole(str, Enum):
     CUSTOMER = "customer"
     ADMIN = "admin"
     DELIVERY_BOY = "delivery_boy"
+    MANAGER = "manager"
 
 
 class User(Base):
@@ -34,7 +35,8 @@ class User(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow,)
     carts = relationship("Cart", back_populates="user")
     addresses = relationship("Address", back_populates="user")
-    orders = relationship("Order", back_populates="user")
+    orders = relationship("Order", foreign_keys="Order.user_id", back_populates="user")
+    delivery_orders = relationship("Order", foreign_keys="Order.delivery_boy_id", back_populates="delivery_boy")
     
     
 class PasswordResetToken(Base):
@@ -251,6 +253,7 @@ class Order(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     address_id = Column(Integer, ForeignKey("addresses.id"), nullable=False, index=True)
+    delivery_boy_id = Column(Integer, ForeignKey("users.id"), nullable=True,index=True)
     status = Column(
     SQLEnum(
         OrderStatus,
@@ -285,9 +288,19 @@ class Order(Base):
         onupdate=datetime.utcnow,
     )
 
-    user = relationship("User", back_populates="orders")
+    # Customer who placed the order
+    user = relationship("User", foreign_keys=[user_id], back_populates="orders")
+
+    # Delivery address
     address = relationship("Address")
+
+    # Delivery boy assigned to this order
+    delivery_boy = relationship("User", foreign_keys=[delivery_boy_id])
+
+    # Order items
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+    # Order payment
     payment = relationship("Payment", back_populates="order", uselist=False, cascade="all, delete-orphan")
 
 

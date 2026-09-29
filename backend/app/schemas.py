@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from app.models import OrderStatus, PaymentMethod, PaymentStatus
+from app.models import OrderStatus, PaymentMethod, PaymentStatus, UserRole
 
 
 
@@ -259,6 +259,7 @@ class OrderResponse(BaseModel):
     id: int
     address_id: int
     status: str
+    delivery_boy_id: int | None 
 
     subtotal: int
     delivery_fee: int
@@ -340,3 +341,38 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=1)
     new_password: str = Field(min_length=6)
+    
+    
+#--------------------Admin Pannel------------------------#
+
+class AdminUserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    phone: str | None
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+    
+    
+class UserStatusUpdateRequest(BaseModel):
+    is_active: bool
+    
+    
+class UserRoleUpdateRequest(BaseModel):
+    role: UserRole
+    
+
+class AdminUserCreateRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    email: EmailStr
+    phone: str | None = None
+    password: str = Field(min_length=8)
+    role: UserRole
+
+
+class DeliveryBoyAssign(BaseModel):
+    delivery_boy_id: int | None = Field(default=None, gt=0)

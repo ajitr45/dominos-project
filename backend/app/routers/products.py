@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from app.database import get_db
-from app.dependencies.auth import require_admin
-from app.schemas import ProductCreate, ProductUpdate, ProductResponse
-from app.services.product_service import  create_product, get_products, get_product_by_id, update_product, deactivate_product
 
+from app.database import get_db
+from app.dependencies.auth import require_admin_or_manager
+from app.schemas import ProductCreate, ProductUpdate, ProductResponse
+from app.services.product_service import (create_product, get_products, get_product_by_id, update_product, deactivate_product)
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 def create_product_api(
     product_data: ProductCreate,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    current_user=Depends(require_admin_or_manager),
 ):
     try:
         product = create_product(db=db, product_data=product_data)
@@ -23,7 +23,7 @@ def create_product_api(
         return product
 
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc),)
 
 
 # Get All Products
@@ -39,7 +39,7 @@ def get_products_api(
 
 
 # Get Single Product
-@router.get("/{product_id}", response_model=ProductResponse,)
+@router.get("/{product_id}", response_model=ProductResponse)
 def get_product_api(product_id: int, db: Session = Depends(get_db)):
     
     product = get_product_by_id(db=db, product_id=product_id)
@@ -56,12 +56,13 @@ def update_product_api(
     product_id: int,
     product_data: ProductUpdate,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    current_user=Depends(require_admin_or_manager),
 ):
+    
     product = get_product_by_id(db=db, product_id=product_id)
 
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found",)
 
     try:
         updated_product = update_product(db=db, product=product, product_data=product_data)
@@ -69,7 +70,7 @@ def update_product_api(
         return updated_product
 
     except ValueError as exc:
-        raise HTTPException( status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 # Deactivate Product
@@ -77,7 +78,7 @@ def update_product_api(
 def deactivate_product_api(
     product_id: int,
     db: Session = Depends(get_db),
-    admin=Depends(require_admin),
+    current_user=Depends(require_admin_or_manager),
 ):
     product = get_product_by_id(db=db, product_id=product_id)
 
