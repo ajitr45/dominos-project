@@ -4,8 +4,7 @@ from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models import User
 from app.schemas import AddressCreate, AddressResponse, AddressUpdate
-from app.services.address_service import create_address, get_user_addresses, get_user_address, update_address, deactivate_address
-
+from app.services.address_service import (activate_address, create_address, get_user_addresses, get_user_address, update_address, deactivate_address)
 
 
 router = APIRouter(prefix="/addresses", tags=["Addresses"])
@@ -17,17 +16,22 @@ def add_address(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    try:
+        address = create_address(
+            db=db,
+            user_id=current_user.id,
+            address_data=address_data,
+        )
 
-   address = create_address(db=db, user_id=current_user.id, address_data=address_data,)
-   
-   return address
+        return address
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get("/", response_model=list[AddressResponse])
-def list_addresses(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+def list_addresses(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    
     addresses = get_user_addresses(db=db, user_id=current_user.id)
 
     return addresses
@@ -39,7 +43,11 @@ def get_address(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    address = get_user_address(db=db, user_id=current_user.id, address_id=address_id)
+    address = get_user_address(
+        db=db,
+        user_id=current_user.id,
+        address_id=address_id,
+    )
 
     if not address:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
@@ -47,19 +55,31 @@ def get_address(
     return address
 
 
-@router.patch("/{address_id}", response_model=AddressResponse,)
+@router.patch("/{address_id}", response_model=AddressResponse)
 def edit_address(
     address_id: int,
     address_data: AddressUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    address = update_address(db=db, user_id=current_user.id, address_id=address_id, address_data=address_data)
+    try:
+        address = update_address(
+            db=db,
+            user_id=current_user.id,
+            address_id=address_id,
+            address_data=address_data,
+        )
 
-    if not address:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+        if not address:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Address not found",
+            )
 
-    return address
+        return address
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.delete("/{address_id}", response_model=AddressResponse)
@@ -68,9 +88,46 @@ def delete_address(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    address = deactivate_address(db=db, user_id=current_user.id, address_id=address_id)
+    try:
+        address = deactivate_address(
+            db=db,
+            user_id=current_user.id,
+            address_id=address_id,
+        )
 
-    if not address:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+        if not address:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
 
-    return address
+        return address
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    
+    
+
+@router.patch("/{address_id}/activate", response_model=AddressResponse)
+def activate_address_endpoint(
+    address_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        address = activate_address(
+            db=db,
+            user_id=current_user.id,
+            address_id=address_id,
+        )
+
+        if not address:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Inactive address not found",
+            )
+
+        return address
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )

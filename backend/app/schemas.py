@@ -1,5 +1,6 @@
+import re
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict, EmailStr, field_validator
 from app.models import OrderStatus, PaymentMethod, PaymentStatus, UserRole
 
 
@@ -194,7 +195,43 @@ class CartResponse(BaseModel):
     
 #--------------------Address-------------------------#
 
-class AddressCreate(BaseModel):
+def validate_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    value = value.strip()
+
+    if not value:
+        raise ValueError("Field cannot contain only spaces")
+
+    return value
+
+
+def validate_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    value = value.strip()
+
+    if not re.fullmatch(r"\+?[0-9]{10,15}", value):
+        raise ValueError("Invalid phone number")
+
+    return value
+
+
+def validate_postal_code(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    value = value.strip()
+
+    if not value.isdigit():
+        raise ValueError("Postal code must contain only digits")
+
+    return value
+
+
+class AddressBase(BaseModel):
     label: str = Field(min_length=2, max_length=30)
     recipient_name: str = Field(min_length=2, max_length=100)
     phone: str = Field(min_length=10, max_length=20)
@@ -204,6 +241,23 @@ class AddressCreate(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     state: str = Field(min_length=2, max_length=100)
     postal_code: str = Field(min_length=4, max_length=10)
+
+    _validate_text = field_validator(
+        "label",
+        "recipient_name",
+        "address_line1",
+        "address_line2",
+        "landmark",
+        "city",
+        "state",
+    )(validate_text)
+
+    _validate_phone = field_validator("phone")(validate_phone)
+
+    _validate_postal_code = field_validator("postal_code")(validate_postal_code)
+
+
+class AddressCreate(AddressBase):
     is_default: bool = False
 
 
@@ -211,7 +265,7 @@ class AddressUpdate(BaseModel):
     label: str | None = Field(default=None, min_length=2, max_length=30)
     recipient_name: str | None = Field(default=None, min_length=2, max_length=100)
     phone: str | None = Field(default=None, min_length=10, max_length=20)
-    address_line1: str | None = Field(default=None, min_length=5, max_length=255,)
+    address_line1: str | None = Field(default=None, min_length=5, max_length=255)
     address_line2: str | None = Field(default=None, max_length=255)
     landmark: str | None = Field(default=None, max_length=150)
     city: str | None = Field(default=None, min_length=2, max_length=100)
@@ -219,18 +273,23 @@ class AddressUpdate(BaseModel):
     postal_code: str | None = Field(default=None, min_length=4, max_length=10)
     is_default: bool | None = None
 
+    _validate_text = field_validator(
+        "label",
+        "recipient_name",
+        "address_line1",
+        "address_line2",
+        "landmark",
+        "city",
+        "state",
+    )(validate_text)
 
-class AddressResponse(BaseModel):
+    _validate_phone = field_validator("phone")(validate_phone)
+
+    _validate_postal_code = field_validator("postal_code")(validate_postal_code)
+
+
+class AddressResponse(AddressBase):
     id: int
-    label: str
-    recipient_name: str
-    phone: str
-    address_line1: str
-    address_line2: str | None
-    landmark: str | None
-    city: str
-    state: str
-    postal_code: str
     is_default: bool
     is_active: bool
 
@@ -376,3 +435,7 @@ class AdminUserCreateRequest(BaseModel):
 
 class DeliveryBoyAssign(BaseModel):
     delivery_boy_id: int | None = Field(default=None, gt=0)
+    
+    
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str

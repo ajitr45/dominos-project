@@ -1,19 +1,30 @@
-from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
-from app.models import (Cart, CartItem, Order, OrderItem, Address, OrderStatus, ProductVariant, Product, User, UserRole)
+from app.models import (Cart, CartItem, Order, OrderItem, Address, OrderStatus, ProductVariant, User, UserRole)
 from app.schemas import OrderCreate
 
 
-def create_order(db: Session, user_id: int, order_data: OrderCreate):
-    # Get user's active cart with product and variant details
+def create_order(
+    db: Session,
+    user_id: int,
+    order_data: OrderCreate,
+) -> Order:
+
+    # Get user's active cart with all required product details.
     cart = (
         db.query(Cart)
         .options(
             selectinload(Cart.items)
             .selectinload(CartItem.product_variant)
-            .selectinload(ProductVariant.product)
+            .selectinload(ProductVariant.product),
+            selectinload(Cart.items)
+            .selectinload(CartItem.product_variant)
+            .selectinload(ProductVariant.size),
         )
-        .filter(Cart.user_id == user_id, Cart.is_active.is_(True))
+        .filter(
+            Cart.user_id == user_id,
+            Cart.is_active.is_(True),
+        )
         .first()
     )
 
@@ -23,8 +34,9 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
     if not cart.items:
         raise ValueError("Cart is empty")
 
-    # Get user's active address
-    address = (db.query(Address)
+    # Get user's active address.
+    address = (
+        db.query(Address)
         .filter(
             Address.id == order_data.address_id,
             Address.user_id == user_id,
@@ -42,24 +54,29 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
     for cart_item in cart.items:
         variant = cart_item.product_variant
         product = variant.product
+        size = variant.size
 
-        # Validate variant availability
+        # Validate product variant.
         if not variant.is_active or not variant.is_available:
             raise ValueError(f"Product variant {variant.id} is not available")
 
-        # Validate product availability
+        # Validate product.
         if not product.is_active or not product.is_available:
             raise ValueError(f"Product {product.id} is not available")
 
-        # Calculate item subtotal
+        # Validate quantity.
+        if cart_item.quantity < 1:
+            raise ValueError(f"Invalid quantity for cart item {cart_item.id}")
+
+        # Calculate subtotal using the current database price.
         item_subtotal = variant.price * cart_item.quantity
         subtotal += item_subtotal
 
-        # Create order item snapshot
+        # Create product snapshot.
         order_item = OrderItem(
             product_variant_id=variant.id,
             product_name=product.name,
-            size_name=variant.size.name,
+            size_name=size.name,
             unit_price=variant.price,
             quantity=cart_item.quantity,
             subtotal=item_subtotal,
@@ -67,7 +84,7 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
 
         order_items.append(order_item)
 
-    # Pricing rules
+    # Pricing rules.
     delivery_fee = 0
     discount = 0
     tax = 0
@@ -79,7 +96,7 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
         - discount
     )
 
-    # Create order with address snapshot
+    # Create order with address snapshot.
     order = Order(
         user_id=user_id,
         address_id=address.id,
@@ -99,20 +116,21 @@ def create_order(db: Session, user_id: int, order_data: OrderCreate):
         items=order_items,
     )
 
+
     try:
         db.add(order)
 
-        # Clear cart after preparing the order
+        # Remove cart items only after the order has been prepared.
         for cart_item in cart.items:
             db.delete(cart_item)
 
-        # Commit order creation and cart clearing together
+        # Order, order items and cart changes are committed together.
         db.commit()
         db.refresh(order)
 
-    except Exception:
+    except IntegrityError:
         db.rollback()
-        raise
+        raise ValueError("Order could not be created")
 
     created_order = order
 
@@ -230,17 +248,14 @@ def assign_delivery_boy(db: Session, order_id: int, delivery_boy_id: int | None)
     order = (db.query(Order).filter(Order.id == order_id).first())
 
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise ValueError("Order not found")
 
     # Delivered and cancelled orders cannot be assigned or reassigned
     if order.status in (
         OrderStatus.DELIVERED,
         OrderStatus.CANCELLED,
     ):
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot assign delivery boy to a delivered or cancelled order",
-        )
+        raise ValueError("Cannot assign delivery boy to a delivered or cancelled order")
 
     # Unassign delivery boy
     if delivery_boy_id is None:
@@ -262,15 +277,15 @@ def assign_delivery_boy(db: Session, order_id: int, delivery_boy_id: int | None)
     delivery_boy = (db.query(User).filter(User.id == delivery_boy_id).first())
 
     if not delivery_boy:
-        raise HTTPException(status_code=404, detail="Delivery boy not found")
+        raise ValueError("Delivery boy not found")
 
     # Validate user role
     if delivery_boy.role != UserRole.DELIVERY_BOY:
-        raise HTTPException(status_code=400, detail="Selected user is not a delivery boy")
+        raise ValueError("Selected user is not a delivery boy")
 
     # Validate account status
     if not delivery_boy.is_active:
-        raise HTTPException(status_code=400, detail="Delivery boy account is inactive")
+        raise ValueError("Delivery boy account is inactive")
 
     # Assign or reassign delivery boy
     order.delivery_boy_id = delivery_boy.id
@@ -349,10 +364,7 @@ def update_delivery_order_status(
     )
 
     if not order:
-        raise HTTPException(
-            status_code=404,
-            detail="Assigned order not found",
-        )
+        raise ValueError("Assigned order not found")
 
     allowed_transitions = {
         OrderStatus.PREPARING: {
@@ -366,18 +378,12 @@ def update_delivery_order_status(
     current_status = order.status
 
     if current_status not in allowed_transitions:
-        raise HTTPException(
-            status_code=400,
-            detail="Delivery boy cannot update this order status",
-        )
+        raise ValueError("Delivery boy cannot update this order status")
 
     if status not in allowed_transitions[current_status]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
+        raise ValueError(
                 f"Cannot change order status "
                 f"from {current_status.value} to {status.value}"
-            ),
         )
 
     order.status = status

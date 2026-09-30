@@ -11,6 +11,9 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 )
+JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(
+    os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7")
+)
 
 if not JWT_SECRET_KEY:
     raise RuntimeError("JWT_SECRET_KEY is not configured")
