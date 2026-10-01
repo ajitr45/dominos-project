@@ -3,7 +3,7 @@ import jwt
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas import (ForgotPasswordRequest, LoginRequest, RefreshTokenRequest, ChangePasswordRequest, ResetPasswordRequest, UserCreate, UserResponse)
-from app.services.auth_service import (authenticate_user, create_password_reset_token, create_user_refresh_token, change_password, register_user, reset_password, rotate_refresh_token)
+from app.services.auth_service import (authenticate_user, create_password_reset_token, create_user_refresh_token, change_password, register_user, reset_password, rotate_refresh_token, revoke_refresh_token)
 from app.core.security import (create_access_token, decode_refresh_token)
 from app.dependencies.auth import get_current_user
 
@@ -86,6 +86,20 @@ def refresh_access_token(token_data: RefreshTokenRequest, db: Session = Depends(
 
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+    
+    
+@router.post("/logout")
+def logout(token_data: RefreshTokenRequest, db: Session = Depends(get_db)):
+    
+    try:
+        revoke_refresh_token(db=db, refresh_token=token_data.refresh_token)
+
+        response = {"message": "Logout successful"}
+
+        return response
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
 
 
 @router.post("/change-password")
