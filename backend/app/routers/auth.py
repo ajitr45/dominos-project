@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 import jwt
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas import (ForgotPasswordRequest, LoginRequest, RefreshTokenRequest, ResetPasswordRequest, UserCreate, UserResponse)
-from app.services.auth_service import (authenticate_user, create_password_reset_token, register_user, reset_password)
+from app.schemas import (ForgotPasswordRequest, LoginRequest, RefreshTokenRequest, ChangePasswordRequest, ResetPasswordRequest, UserCreate, UserResponse)
+from app.services.auth_service import (authenticate_user, create_password_reset_token, change_password, register_user, reset_password)
 from app.core.security import create_access_token, create_refresh_token, decode_refresh_token
+from app.dependencies.auth import get_current_user
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -87,6 +88,34 @@ def refresh_access_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
+        )
+        
+        
+@router.post("/change-password")
+def change_user_password(
+    password_data: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    try:
+        updated_user = change_password(
+            db=db,
+            user=current_user,
+            current_password=password_data.current_password,
+            new_password=password_data.new_password,
+        )
+
+        response = {
+            "message": "Password changed successfully",
+            "user_id": updated_user.id,
+        }
+
+        return response
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
         )
 
 @router.post("/forgot-password")
