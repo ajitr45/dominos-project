@@ -150,6 +150,10 @@ class CartItem(Base):
             "product_variant_id",
             name="uq_cart_items_cart_variant",
         ),
+        CheckConstraint(
+            "quantity >= 1 AND quantity <= 20",
+            name="ck_cart_items_quantity",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)

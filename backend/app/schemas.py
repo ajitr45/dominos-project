@@ -172,7 +172,7 @@ class CartItemCreate(BaseModel):
 
 
 class CartItemUpdate(BaseModel):
-    quantity: int = Field(ge=1, le=20)
+    quantity: int = Field(default=1, ge=1, le=20)
 
 
 class CartItemResponse(BaseModel):
@@ -262,6 +262,7 @@ class AddressCreate(AddressBase):
 
 
 class AddressUpdate(BaseModel):
+
     label: str | None = Field(default=None, min_length=2, max_length=30)
     recipient_name: str | None = Field(default=None, min_length=2, max_length=100)
     phone: str | None = Field(default=None, min_length=10, max_length=20)
@@ -287,6 +288,25 @@ class AddressUpdate(BaseModel):
 
     _validate_postal_code = field_validator("postal_code")(validate_postal_code)
 
+    @field_validator(
+        "label",
+        "recipient_name",
+        "phone",
+        "address_line1",
+        "address_line2",
+        "landmark",
+        "city",
+        "state",
+        "postal_code",
+        "is_default",
+        mode="before",
+    )
+    @classmethod
+    def reject_explicit_none(cls, value):
+        if value is None:
+            raise ValueError("Field cannot be null")
+
+        return value
 
 class AddressResponse(AddressBase):
     id: int
