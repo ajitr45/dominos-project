@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-
 from app.database import get_db
 from app.dependencies.auth import require_admin_or_manager
 from app.schemas import ProductCreate, ProductUpdate, ProductResponse
-from app.services.product_service import (create_product, get_products, get_product_by_id, update_product, deactivate_product)
+from app.services.product_service import (activate_product, create_product, get_products, get_product_by_id, update_product, deactivate_product)
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -12,11 +11,8 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 # Create Product
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
-def create_product_api(
-    product_data: ProductCreate,
-    db: Session = Depends(get_db),
-    current_user=Depends(require_admin_or_manager),
-):
+def create_product_api(product_data: ProductCreate, db: Session = Depends(get_db), current_user=Depends(require_admin_or_manager)):
+    
     try:
         product = create_product(db=db, product_data=product_data)
 
@@ -88,3 +84,17 @@ def deactivate_product_api(
     deactivated_product = deactivate_product(db=db, product=product)
 
     return deactivated_product
+
+#Activate Product
+@router.patch("/{product_id}/activate", response_model=ProductResponse)
+def activate_product_api(product_id: int, db: Session = Depends(get_db), current_user=Depends(require_admin_or_manager)):
+    try:
+        activated_product = activate_product(db=db, product_id=product_id)
+
+        return activated_product
+
+    except ValueError as exc:
+        if str(exc) == "Product not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

@@ -137,3 +137,28 @@ def deactivate_category(
         raise
 
     return category
+
+
+def activate_category(db: Session, category_id: int):
+
+    category = (db.query(Category).filter(Category.id == category_id).first())
+
+    if not category:
+        raise ValueError("Category not found")
+
+    if category.is_active:
+        raise ValueError("Category is already active")
+
+    category.is_active = True
+
+    try:
+        db.commit()
+        db.refresh(category)
+
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("Category could not be activated") from exc
+
+    activated_category = category
+
+    return activated_category

@@ -81,7 +81,8 @@ def get_product_variant_by_id(db: Session, variant_id: int) -> ProductVariant | 
         )
         .first()
     )
-    
+
+
 def get_product_variant_for_admin(db: Session, variant_id: int) -> ProductVariant | None:
 
     variant = (db.query(ProductVariant).filter(ProductVariant.id == variant_id).first())
@@ -89,27 +90,22 @@ def get_product_variant_for_admin(db: Session, variant_id: int) -> ProductVarian
     return variant
 
 
-def update_product_variant(db: Session, variant: ProductVariant, variant_data: ProductVariantUpdate) -> ProductVariant:
+def update_product_variant(
+    db: Session,
+    variant: ProductVariant,
+    variant_data: ProductVariantUpdate,
+) -> ProductVariant:
+
+    if not variant.product.is_active:
+        raise ValueError("Product is inactive")
 
     update_data = variant_data.model_dump(exclude_unset=True)
 
-    if "product_id" in update_data:
-
-        product = (
-            db.query(Product)
-            .filter(
-                Product.id == update_data["product_id"],
-                Product.is_active.is_(True),
-            )
-            .first()
-        )
-
-        if not product:
-            raise ValueError("Product not found")
-
+    # Validate active size
     if "size_id" in update_data:
-
-        size = (db.query(Size).filter(
+        size = (
+            db.query(Size)
+            .filter(
                 Size.id == update_data["size_id"],
                 Size.is_active.is_(True),
             )
@@ -119,11 +115,11 @@ def update_product_variant(db: Session, variant: ProductVariant, variant_data: P
         if not size:
             raise ValueError("Size not found")
 
-    new_product_id = update_data.get("product_id", variant.product_id,)
+    # Product cannot be changed
+    new_product_id = variant.product_id
+    new_size_id = update_data.get("size_id", variant.size_id)
 
-    new_size_id = update_data.get("size_id", variant.size_id,)
-
-    # Prevent duplicate product + size combination
+    # Prevent duplicate product + size
     existing_variant = (
         db.query(ProductVariant)
         .filter(
@@ -138,6 +134,7 @@ def update_product_variant(db: Session, variant: ProductVariant, variant_data: P
     if existing_variant:
         raise ValueError("Product variant already exists")
 
+    # Update only provided fields
     for field, value in update_data.items():
         setattr(variant, field, value)
 
@@ -154,14 +151,29 @@ def update_product_variant(db: Session, variant: ProductVariant, variant_data: P
 
 def deactivate_product_variant(db: Session, variant: ProductVariant) -> ProductVariant:
 
+    if not variant.is_active:
+        raise ValueError("Product variant is already inactive")
+
     variant.is_active = False
 
-    db.commit()
-    db.refresh(variant)
+    try:
+        db.commit()
+        db.refresh(variant)
+
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("Product variant could not be deactivated")
 
     return variant
 
+
 def activate_product_variant(db: Session, variant: ProductVariant) -> ProductVariant:
+
+    if variant.is_active:
+        raise ValueError("Product variant is already active")
+
+    if not variant.product.is_active:
+        raise ValueError("Product is inactive")
 
     existing_variant = (
         db.query(ProductVariant)

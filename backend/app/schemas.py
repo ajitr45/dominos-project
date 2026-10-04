@@ -133,7 +133,7 @@ class ProductVariantUpdate(BaseModel):
     size_id: int | None = None
     price: int | None = Field(default=None, gt=0)
     is_available: bool | None = None
-    is_active: bool | None = None
+
 
 
 class ProductVariantSizeResponse(BaseModel):
@@ -459,3 +459,26 @@ class DeliveryBoyAssign(BaseModel):
     
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+    
+    
+#------------------Admin/ Manager Dashboard------------------#
+
+class DashboardResponse(BaseModel):
+    total_users: int
+    active_users: int
+
+    total_products: int
+    active_products: int
+
+    total_categories: int
+    active_categories: int
+
+    pending_orders: int
+    confirmed_orders: int
+    preparing_orders: int
+    out_for_delivery_orders: int
+    delivered_orders: int
+    cancelled_orders: int
+
+    pending_payments: int
+    paid_payments: int

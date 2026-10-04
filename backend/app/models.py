@@ -344,6 +344,8 @@ class PaymentMethod(str, Enum):
 
 class Payment(Base):
     __tablename__ = "payments"
+    
+    __table_args__ = (CheckConstraint("amount >= 0", name="ck_payments_amount_non_negative"),)
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, unique=True, index=True,)

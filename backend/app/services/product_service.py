@@ -158,3 +158,25 @@ def deactivate_product(db: Session, product: Product) -> Product:
         raise ValueError("Product could not be deactivated")
 
     return product
+
+def activate_product(db: Session, product_id: int) ->Product:
+    
+    product = (db.query(Product).filter(Product.id == product_id).first())
+    
+    if not product:
+        raise ValueError("Product not found")
+    
+    if product.is_active:
+        raise ValueError("Product is already active")
+    
+    product.is_active = True
+    
+    try:
+        db.commit()
+        db.refresh(product)
+        
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("Product could not be activated")
+    
+    return product
