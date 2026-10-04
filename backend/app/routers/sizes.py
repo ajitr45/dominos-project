@@ -36,17 +36,26 @@ def get_size_api(size_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{size_id}", response_model=SizeResponse)
 def update_size_api(size_id: int, size_data: SizeUpdate = None, db: Session = Depends(get_db), admin=Depends(require_admin)):
+    
     if size_data is None:
         size_data = SizeUpdate()
 
-    try:
-        size = update_size(db, size_id, size_data)
-        if not size:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Size not found")
-        return size
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    size = get_size_for_admin(db, size_id)
 
+    if not size:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Size not found"
+        )
+
+    try:
+        updated_size = update_size(db, size, size_data)
+        return updated_size
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc)
+        )
 
 @router.delete("/{size_id}", response_model=SizeResponse)
 def deactivate_size_api(size_id: int, db: Session = Depends(get_db), admin=Depends(require_admin)):
@@ -58,22 +67,12 @@ def deactivate_size_api(size_id: int, db: Session = Depends(get_db), admin=Depen
     return size
 
 
-@router.patch(
-    "/{size_id}/activate",
-    response_model=SizeResponse,
-)
-def activate_size_api(
-    size_id: int,
-    db: Session = Depends(get_db),
-    admin=Depends(require_admin),
-):
+@router.patch("/{size_id}/activate", response_model=SizeResponse)
+def activate_size_api(size_id: int, db: Session = Depends(get_db), admin=Depends(require_admin)):
     size = get_size_for_admin(db, size_id)
 
     if not size:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Size not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Size not found")
 
     if size.is_active:
         raise HTTPException(
