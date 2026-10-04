@@ -46,28 +46,35 @@ def get_size_for_admin(db: Session, size_id: int) -> Size | None:
 
 
 def update_size(db: Session, size: Size, size_data: SizeUpdate) -> Size:
-    
+
     update_data = size_data.model_dump(exclude_unset=True)
-    
+
     if "name" in update_data:
-        
-        existing_size = (db.query(Size).filter(Size.name == update_data["name"], Size.id != Size.id, Size.is_active.is_(True))).first()
-        
+
+        existing_size = (
+            db.query(Size).filter(
+                Size.name == update_data["name"],
+                Size.id != size.id,
+                Size.is_active.is_(True),
+            )
+            .first()
+        )
+
         if existing_size:
             raise ValueError("Size already exists")
-        
-        for field, value in update_data.items():
-            setattr(size, field, value)
-            
-        try:
-            db.commit()
-            db.refresh(size)
-            
-        except IntegrityError:
-            db.rollback()
-            raise ValueError("Size could not be updated")
-        
-        return size
+
+    for field, value in update_data.items():
+        setattr(size, field, value)
+
+    try:
+        db.commit()
+        db.refresh(size)
+
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("Size could not be updated")
+
+    return size
     
 def deactivate_size(db: Session, size: Size) -> Size:
 
