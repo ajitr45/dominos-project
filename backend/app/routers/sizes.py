@@ -59,12 +59,16 @@ def update_size_api(size_id: int, size_data: SizeUpdate = None, db: Session = De
 
 @router.delete("/{size_id}", response_model=SizeResponse)
 def deactivate_size_api(size_id: int, db: Session = Depends(get_db), admin=Depends(require_admin)):
-    size = deactivate_size(db, size_id)
+    try:
+        size = deactivate_size(db, size_id)
 
-    if not size:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Size not found")
+        if not size:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Size not found")
 
-    return size
+        return size
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.patch("/{size_id}/activate", response_model=SizeResponse)

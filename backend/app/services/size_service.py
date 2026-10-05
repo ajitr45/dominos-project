@@ -16,7 +16,7 @@ def create_size(db: Session, size_data: SizeCreate) -> Size:
     try:
         db.add(size)
         db.commit()
-        db.refresh()
+        db.refresh(size)
         
     except IntegrityError:
         db.rollback()
@@ -76,12 +76,25 @@ def update_size(db: Session, size: Size, size_data: SizeUpdate) -> Size:
 
     return size
     
-def deactivate_size(db: Session, size: Size) -> Size:
+def deactivate_size(db: Session, size_id: int) -> Size | None:
+
+    size = (db.query(Size).filter(Size.id == size_id).first())
+
+    if not size:
+        return None
+
+    if not size.is_active:
+        raise ValueError("Size is already inactive")
 
     size.is_active = False
 
-    db.commit()
-    db.refresh(size)
+    try:
+        db.commit()
+        db.refresh(size)
+
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("Size could not be deactivated")
 
     return size
 
