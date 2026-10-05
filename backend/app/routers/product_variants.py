@@ -73,20 +73,22 @@ def update_product_variant_api(
 
 
 # Deactivate Product Variant
-@router.patch("/{variant_id}/deactivate", response_model=ProductVariantResponse,)
-def deactivate_product_variant_api(
-    variant_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(require_admin_or_manager),
-):
+@router.patch("/{variant_id}/deactivate", response_model=ProductVariantResponse)
+def deactivate_product_variant_api(variant_id: int, db: Session = Depends(get_db), current_user=Depends(require_admin_or_manager)):
+    
     variant = get_product_variant_by_id(db, variant_id)
 
     if not variant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product variant not found")
 
-    deactivated_variant = deactivate_product_variant(db, variant)
+    try:
+        deactivated_variant = deactivate_product_variant(db, variant)
 
-    return deactivated_variant
+        return deactivated_variant
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+)
 
 
 # Activate Product Variant
