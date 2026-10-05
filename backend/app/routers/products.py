@@ -81,9 +81,13 @@ def deactivate_product_api(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    deactivated_product = deactivate_product(db=db, product=product)
+    try:
+        deactivated_product = deactivate_product(db=db, product=product)
 
-    return deactivated_product
+        return deactivated_product
+
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 #Activate Product
 @router.patch("/{product_id}/activate", response_model=ProductResponse)
